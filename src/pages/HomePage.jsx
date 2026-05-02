@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
-// import { useNavigate } from 'react-router-dom'
+import Header from '../components/Header'
+import Footer from '../components/Footer'
 import TopBar from '../components/TopBar'
 import mockEvents from '../data/mockEvents'
 
@@ -11,6 +12,11 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showCreatePanel, setShowCreatePanel] = useState(false)
+  const [selectedEvent, setSelectedEvent] = useState(null)
+  const [currentUser] = useState(() => {
+    const user = localStorage.getItem('currentUser')
+    return user ? JSON.parse(user) : null
+  })
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -19,6 +25,8 @@ export default function HomePage() {
     longitude: '',
     event_date: '',
     max_participants: '',
+    is_private: false,
+    category: '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -32,7 +40,7 @@ export default function HomePage() {
       date: event.event_date ? new Date(event.event_date).toLocaleDateString('uk-UA') : '',
       location: event.location,
       description: event.description,
-      category: 'Захід', // Можна додати категорію в БД пізніше
+      // category: 'Захід', // Можна додати категорію в БД пізніше
       participants: event.participant_count || 0,
     }))
   }
@@ -64,13 +72,44 @@ export default function HomePage() {
 
   // Обробка змін у формі
   const handleFormChange = (e) => {
-    const { name, value } = e.target
+    const { name, value, type, checked } = e.target
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === 'checkbox' ? checked : value,
     }))
   }
 
+  // Відкриття бічної панелі для редагування/перегляду івенту
+  const handleEventClick = async (eventId) => {
+    try {
+      const response = await fetch(`${API_URL}/events/${eventId}`)
+      if (!response.ok) throw new Error('Failed to fetch event')
+      const eventData = await response.json()
+      
+      setSelectedEvent(eventData)
+      
+      // Заповнюємо форму даними івенту
+      setFormData({
+        title: eventData.title || '',
+        description: eventData.description || '',
+        location: eventData.location || '',
+        latitude: eventData.latitude || '',
+        longitude: eventData.longitude || '',
+        event_date: eventData.event_date ? new Date(eventData.event_date).toISOString().slice(0, 16) : '',
+        max_participants: eventData.max_participants || '',
+        is_private: eventData.is_private || false,
+        category: eventData.category || '',
+      })
+      
+      setShowCreatePanel(true)
+    } catch (err) {
+      console.error('Error loading event:', err)
+      setFormError('Помилка при завантаженні інформації про захід')
+    }
+  }
+
+  const isEditMode = !!selectedEvent;
+  const isEditAllowed = selectedEvent?.creator_id === currentUser?.id;
   // Відправка форми на сервер
   const handleCreateEvent = async (e) => {
     e.preventDefault()
@@ -85,36 +124,74 @@ export default function HomePage() {
     try {
       setSubmitting(true)
       
-      // Для тесту використовуємо перший користувач як creator
-      const response = await fetch(`${API_URL}/events`, {
-        method: 'POST',
+      const method = isEditMode ? 'PUT' : 'POST'
+      const url = isEditMode ? `${API_URL}/events/${selectedEvent.id}` : `${API_URL}/events`
+      
+      const payload = {
+        title: formData.title,
+        description: formData.description,
+        location: formData.location,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        event_date: new Date(formData.event_date).toISOString(),
+        max_participants: formData.max_participants ? parseInt(formData.max_participants) : null,
+        is_private: formData.is_private,
+        category: formData.category,
+      }
+
+      // Для POST додаємо creator_id
+      if (!isEditMode) {
+        payload.creator_id = currentUser.id
+      }
+
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          creator_id: 1, // TODO: Замініть на реальний ID користувача
-          title: formData.title,
-          description: formData.description,
-          location: formData.location,
-          latitude: formData.latitude ? parseFloat(formData.latitude) : null,
-          longitude: formData.longitude ? parseFloat(formData.longitude) : null,
-          event_date: new Date(formData.event_date).toISOString(),
-          max_participants: formData.max_participants ? parseInt(formData.max_participants) : null,
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Помилка при створенні заходу')
+        throw new Error(errorData.error || `Помилка при ${isEditMode ? 'редагуванні' : 'створенні'} заходу`)
       }
 
-      const newEvent = await response.json()
+      const responseData = await response.json()
+      const newEvent = responseData.event || responseData
+
+      if (isEditMode) {
+        // Оновлюємо список подій
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.id === selectedEvent.id
+              ? {
+                  id: newEvent.id,
+                  title: newEvent.title,
+                  date: new Date(newEvent.event_date).toLocaleDateString('uk-UA'),
+                  location: newEvent.location,
+                  description: newEvent.description,
+                  participants: e.participants,
+                }
+              : e
+          )
+        )
+      } else {
+        setEvents((prev) => [
+          ...prev,
+          {
+            id: newEvent.id,
+            title: newEvent.title,
+            date: new Date(newEvent.event_date).toLocaleDateString('uk-UA'),
+            location: newEvent.location,
+            description: newEvent.description,
+            participants: 1,
+          },
+        ])
+      }
       
-      // Додаємо новий захід до списку
-      setEvents((prev) => [...prev, transformEvents([newEvent])[0]])
-      
-      // Закриваємо панель і очищуємо форму
       setShowCreatePanel(false)
+      setSelectedEvent(null)
       setFormData({
         title: '',
         description: '',
@@ -123,9 +200,11 @@ export default function HomePage() {
         longitude: '',
         event_date: '',
         max_participants: '',
+        is_private: false,
+        category: '',
       })
     } catch (err) {
-      console.error('Помилка при створенні заходу:', err)
+      console.error(`Помилка при ${selectedEvent ? 'редагуванні' : 'створенні'} заходу:`, err)
       setFormError(err.message)
     } finally {
       setSubmitting(false)
@@ -141,7 +220,7 @@ export default function HomePage() {
       return (
         event.title.toLowerCase().includes(query) ||
         event.description.toLowerCase().includes(query) ||
-        event.category.toLowerCase().includes(query) ||
+        // event.category.toLowerCase().includes(query) ||
         event.location.toLowerCase().includes(query)
       )
     })
@@ -149,20 +228,7 @@ export default function HomePage() {
 
   return (
     <div className={`page-shell ${showCreatePanel ? 'with-panel' : ''}`}>
-      <header className="site-header">
-        <div className="header-left">
-          <a href="/" className="brand-link">
-            <span className="brand-logo">KMG</span>
-            <span className="brand-name">Offline Event Hub</span>
-          </a>
-        </div>
-        <nav className="header-nav">
-          <a href="/">Домівка</a>
-          <a href="/about">Про нас</a>
-          <a href="/account">Аккаунт</a>
-          <a href="/contacts">Контакти</a>
-        </nav>
-      </header>
+      <Header />
 
       <main className={`app-shell ${showCreatePanel ? 'with-panel' : ''}`}>
         <div className="page-card">
@@ -177,7 +243,21 @@ export default function HomePage() {
             <button
               type="button"
               className="button"
-              onClick={() => setShowCreatePanel(true)}
+              onClick={() => {
+                setSelectedEvent(null)
+                setFormData({
+                  title: '',
+                  description: '',
+                  location: '',
+                  latitude: '',
+                  longitude: '',
+                  event_date: '',
+                  max_participants: '',
+                  is_private: false,
+                  category: '',
+                })
+                setShowCreatePanel(true)
+              }}
             >
               Створити подію
             </button>
@@ -193,7 +273,12 @@ export default function HomePage() {
 
         <div className="card-list">
           {filteredEvents.map((event) => (
-            <article key={event.id} className="event-card">
+            <article
+              key={event.id}
+              className="event-card"
+              onClick={() => handleEventClick(event.id)}
+              style={{ cursor: 'pointer' }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
                 <h3>{event.title}</h3>
                 <span>{event.date}</span>
@@ -203,16 +288,13 @@ export default function HomePage() {
                 <strong>Локація:</strong> {event.location} · <strong>Учасників:</strong>{' '}
                 {event.participants}
               </p>
-              <div className="tag-list">
-                <span className="tag">{event.category}</span>
-              </div>
             </article>
           ))}
           {filteredEvents.length === 0 && !loading && (
             <p className="notice">За вашим запитом подій не знайдено. Спробуйте інші ключові слова.</p>
           )}
         </div>
-        <div className="tasks-panel">
+        {/* <div className="tasks-panel">
           <div className="task-card">
             <h4>Швидкі задачі організатора</h4>
             <ul className="task-list">
@@ -226,18 +308,21 @@ export default function HomePage() {
             <h4>Поточні процеси</h4>
             <p className="notice">Автоматизація дозволяє зменшити час на координацію та обробку заявок.</p>
           </div>
-        </div>
+        </div> */}
       </div>
 
       {/* Бічна панель для створення заходу */}
       {showCreatePanel && (
         <aside className="create-event-panel">
           <div className="panel-header">
-            <h2>Створити новий захід</h2>
+            <h2>{selectedEvent ? 'Деталі заходу' : 'Створити новий захід'}</h2>
             <button
               type="button"
               className="close-btn"
-              onClick={() => setShowCreatePanel(false)}
+              onClick={() => {
+                setShowCreatePanel(false)
+                setSelectedEvent(null)
+              }}
               aria-label="Закрити панель"
             >
               ✕
@@ -245,6 +330,12 @@ export default function HomePage() {
           </div>
 
           <form onSubmit={handleCreateEvent} className="create-event-form">
+              {isEditMode && !isEditAllowed && (
+                <div className="notice" style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#e8f4f8', borderRadius: '4px' }}>
+                  📖 Ви можете лише переглядати цей захід
+                </div>
+              )}
+
               {formError && (
                 <div className="form-error">
                   <p>❌ {formError}</p>
@@ -264,7 +355,7 @@ export default function HomePage() {
                 />
               </div>
 
-              <div className="form-group">
+              {/* <div className="form-group">
                 <label htmlFor="description">Опис</label>
                 <input
                   className="big"
@@ -276,7 +367,7 @@ export default function HomePage() {
                   placeholder="Розповідайте про захід, хто може взяти участь, що очікувати"
                   // rows="4"
                 />
-              </div>
+              </div> */}
 
               <div className="form-group">
                 <label htmlFor="location">Місце проведення *</label>
@@ -343,43 +434,50 @@ export default function HomePage() {
                 />
               </div>
 
+              {(!isEditMode || isEditAllowed) && (
+                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between' }}>
+                  <label htmlFor="is_private" style={{ margin: 0 }}>Приватний захід</label>
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      id="is_private"
+                      name="is_private"
+                      checked={formData.is_private}
+                      onChange={handleFormChange}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+              )}
+
               <div className="form-actions">
                 <button
                   type="button"
                   className="button button-secondary"
-                  onClick={() => setShowCreatePanel(false)}
+                  onClick={() => {
+                    setShowCreatePanel(false)
+                    setSelectedEvent(null)
+                  }}
                 >
-                  Скасувати
+                  {selectedEvent ? 'Закрити' : 'Скасувати'}
                 </button>
-                <button
-                  type="submit"
-                  className="button button-primary"
-                  disabled={submitting}
-                >
-                  {submitting ? 'Створення...' : 'Створити захід'}
-                </button>
+                {(!isEditMode || isEditAllowed) && (
+                  <button
+                    type="submit"
+                    className="button button-primary"
+                    disabled={submitting}
+                  >
+                    {submitting
+                      ? (selectedEvent ? 'Збереження...' : 'Створення...')
+                      : (selectedEvent ? 'Зберегти' : 'Створити захід')}
+                  </button>
+                )}
               </div>
             </form>
           </aside>
       )}
     </main>
-
-      <footer className="site-footer">
-        <div className="footer-left">
-          <a href="/">Домівка</a>
-          <a href="/about">Про нас</a>
-          <a href="/account">Аккаунт</a>
-          <a href="/contacts">Контакти</a>
-        </div>
-        <div className="footer-center">
-          <p>Плануй заходи швидко, організовуй ефективно, живи яскраво.</p>
-        </div>
-        <div className="footer-right">
-          <p>@KMG</p>
-          <p>+38 (050) 961-1945</p>
-          <p>support@kmgevent.com</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }

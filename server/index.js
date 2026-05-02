@@ -97,7 +97,10 @@ app.get('/api/events/:id', async (req, res) => {
         e.event_date,
         e.max_participants,
         e.status,
+        e.is_private,
+        e.category,
         e.created_at,
+        e.updated_at,
         u.id as creator_id,
         u.full_name as creator_name,
         u.nickname as creator_nickname,
@@ -326,7 +329,7 @@ app.put('/api/users/:id', async (req, res) => {
 // Create new event
 app.post('/api/events', async (req, res) => {
   try {
-    const { creator_id, title, description, location, latitude, longitude, event_date, max_participants } = req.body;
+    const { creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category } = req.body;
 
     // Валідація
     if (!creator_id || !title || !location || !event_date) {
@@ -336,16 +339,56 @@ app.post('/api/events', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO events (creator_id, title, description, location, latitude, longitude, event_date, max_participants)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, creator_id, title, description, location, latitude, longitude, event_date, max_participants, status, created_at`,
-      [creator_id, title, description || null, location, latitude || null, longitude || null, event_date, max_participants || null]
+      `INSERT INTO events (creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category, status, created_at`,
+      [creator_id, title, description || null, location, latitude || null, longitude || null, event_date, max_participants || null, is_private || false, category || null]
     );
 
     const newEvent = result.rows[0];
     res.status(201).json(newEvent);
   } catch (error) {
     console.error('Error creating event:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update event
+app.put('/api/events/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, location, latitude, longitude, event_date, max_participants, is_private, category } = req.body;
+
+    if (!title || !location || !event_date) {
+      return res.status(400).json({
+        error: 'Обов\'язкові поля: title, location, event_date'
+      });
+    }
+
+    const result = await pool.query(
+      `UPDATE events
+       SET title = $1,
+           description = $2,
+           location = $3,
+           latitude = $4,
+           longitude = $5,
+           event_date = $6,
+           max_participants = $7,
+           is_private = $8,
+           category = $9,
+           updated_at = NOW()
+       WHERE id = $10
+       RETURNING id, creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category, status, created_at, updated_at`,
+      [title, description || null, location, latitude || null, longitude || null, event_date, max_participants || null, is_private || false, category || null, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    res.json({ message: 'Event updated successfully', event: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating event:', error);
     res.status(500).json({ error: error.message });
   }
 });

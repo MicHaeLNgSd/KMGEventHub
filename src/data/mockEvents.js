@@ -1,3 +1,4 @@
+//TODO DELETE THIS FILE
 const mockEvents = [
   {
     id: 1,

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import Header from '../components/Header'
+import Footer from '../components/Footer'
 import avatarPlaceholder from '../assets/avatar-placeholder.svg'
 
 export default function AccountPage() {
@@ -143,19 +145,7 @@ export default function AccountPage() {
 
   return (
     <div className="page-shell">
-      <header className="site-header">
-        <div className="header-left">
-          <a href="/" className="brand-link">
-            <span className="brand-logo">KMG</span>
-            <span className="brand-name">Offline Event Hub</span>
-          </a>
-        </div>
-        <nav className="header-nav">
-          <a href="/home">Домівка</a>
-          <a href="/account">Аккаунт</a>
-          <a href="/login">Вихід</a>
-        </nav>
-      </header>
+      <Header />
 
       <main className="app-shell">
         <div className="page-card profile-card">
@@ -265,21 +255,7 @@ export default function AccountPage() {
           </form>
         </div>
       </main>
-
-      <footer className="site-footer">
-        <div className="footer-left">
-          <a href="/home">Домівка</a>
-          <a href="/account">Аккаунт</a>
-        </div>
-        <div className="footer-center">
-          <p>Плануй заходи швидко, організовуй ефективно, живи яскраво.</p>
-        </div>
-        <div className="footer-right">
-          <p>@KMG</p>
-          <p>+38 (050) 961-1945</p>
-          <p>support@kmgevent.com</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }

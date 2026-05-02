@@ -3,6 +3,8 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import HomePage from './pages/HomePage'
 import AccountPage from './pages/AccountPage'
+import ContactPage from './pages/ContactPage'
+import AboutPage from './pages/AboutPage'
 import './App.css'
 
 function App() {
@@ -14,7 +16,9 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/account" element={<AccountPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/contacts" element={<ContactPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
     </BrowserRouter>
   )
