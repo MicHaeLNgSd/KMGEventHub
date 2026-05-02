@@ -4,6 +4,9 @@ import Header from '../components/Header'
 import Footer from '../components/Footer'
 import avatarPlaceholder from '../assets/avatar-placeholder.svg'
 import API from '../utils/api'
+import { authService } from '../services/authService'
+import { validateAge, validatePhone } from '../utils/validators'
+import { formatPhoneInput } from '../utils/formatters'
 
 export default function AccountPage() {
   const [user, setUser] = useState(null)
@@ -32,8 +35,8 @@ export default function AccountPage() {
       try {
         setLoading(true)
         // Спочатку отримати базові дані користувача
-        const meResponse = await API.get('/auth/me')
-        const currentUser = meResponse.data.user
+        const meResponse = await authService.getCurrentUser()
+        const currentUser = meResponse.user
 
         // Потім отримати повні дані
         const response = await API.get(`/users/${currentUser.id}`)
@@ -65,10 +68,8 @@ export default function AccountPage() {
 
   const handleChangePhone = (event) => {
     const { name, value } = event.target
-    const newValue1 = (value == "" || value.length < 3) ? "+38" : value;
-    const newValue2 = newValue1.startsWith('+38') ? newValue1 : '+38' + newValue1;
-    const newValue3 = newValue2.replace(/[\s()-]/g, '');
-    setForm((prev) => ({ ...prev, [name]: newValue3 }));
+    const formattedPhone = formatPhoneInput(value)
+    setForm((prev) => ({ ...prev, [name]: formattedPhone }))
   }
 
   
@@ -77,19 +78,18 @@ export default function AccountPage() {
     setError('')
     setMessage('')
 
-    const trimmedPhone = form.phone_number.trim()//.replace(/[\s()-]/g, '')
-    // const formatedPhone = /^0\d{9}$/.test(trimmedPhone) ? '+38' + trimmedPhone : trimmedPhone
+    const trimmedPhone = form.phone_number.trim()
     const trimmedAge = (form.age+'').trim()
-    console.info(trimmedPhone)
 
-    //(?:\+?380|0)
-    if (trimmedPhone && !/^\+380\d{9}$/.test(trimmedPhone)) {
-      setError('Телефон повинен бути у форматі +380XXXXXXXXX.')
+    const phoneError = validatePhone(trimmedPhone)
+    if (phoneError) {
+      setError(phoneError)
       return
     }
 
-    if (trimmedAge && (Number.isNaN(Number(trimmedAge)) || Number(trimmedAge) < 13 || Number(trimmedAge) > 120)) {
-      setError('Вік повинен бути числом від 13 до 120.')
+    const ageError = validateAge(trimmedAge)
+    if (ageError) {
+      setError(ageError)
       return
     }
 

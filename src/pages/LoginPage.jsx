@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import API from '../utils/api'
+import { authService } from '../services/authService'
 
 export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' })
@@ -14,17 +14,10 @@ export default function LoginPage() {
     setIsSubmitting(true)
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: form.email.trim(), password: form.password })
+      const data = await authService.login({
+        email: form.email.trim(),
+        password: form.password
       })
-
-      const data = await response.json()
-      if (!response.ok) {
-        setError(data.error || 'Не вдалося увійти. Перевірте дані.')
-        return
-      }
 
       if (data.token) {
         localStorage.setItem('authToken', data.token)

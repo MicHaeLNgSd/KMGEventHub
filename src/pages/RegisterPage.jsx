@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import API from '../utils/api'
-
-const PHONE_REGEX = /^(?:\+?380|0)\d{9}$/
+import { authService } from '../services/authService'
+import { validateAge, validatePhone } from '../utils/validators'
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -25,20 +24,22 @@ export default function RegisterPage() {
     const trimmedPhone = form.phone.trim()
     const trimmedAge = form.age.trim()
 
-    if (trimmedAge && (Number.isNaN(Number(trimmedAge)) || Number(trimmedAge) < 13 || Number(trimmedAge) > 120)) {
-      setError('Вік повинен бути числом від 13 до 120.')
+    const ageError = validateAge(trimmedAge)
+    if (ageError) {
+      setError(ageError)
       return
     }
 
-    if (trimmedPhone && !PHONE_REGEX.test(trimmedPhone.replace(/[^\d+]/g, ''))) {
-      setError('Телефон повинен бути у форматі +380XXXXXXXXX або 0XXXXXXXXX.')
+    const phoneError = validatePhone(trimmedPhone)
+    if (phoneError) {
+      setError(phoneError)
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      const response = await API.post('/auth/register', {
+      const data = await authService.register({
         full_name: form.name.trim(),
         nickname: form.nickname.trim(),
         age: trimmedAge,
@@ -47,8 +48,8 @@ export default function RegisterPage() {
         password: form.password
       })
 
-      if (response.data.token) {
-        localStorage.setItem('authToken', response.data.token)
+      if (data.token) {
+        localStorage.setItem('authToken', data.token)
       }
       navigate('/home')
     } catch (error) {

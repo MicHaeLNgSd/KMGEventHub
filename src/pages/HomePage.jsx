@@ -2,9 +2,11 @@ import { useMemo, useState, useEffect } from 'react'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import TopBar from '../components/TopBar'
+import EventCard from '../components/EventCard'
+import EventFormPanel from '../components/EventFormPanel'
+import { eventService } from '../services/eventService'
+import { authService } from '../services/authService'
 import mockEvents from '../data/mockEvents'
-
-const API_URL = 'http://localhost:3000/api'
 
 export default function HomePage() {
   const [search, setSearch] = useState('')
@@ -31,35 +33,29 @@ export default function HomePage() {
   const [formError, setFormError] = useState(null)
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken')
-    if (token) {
-      fetch('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-        .then(res => res.json())
-        .then(data => {
+    const fetchUser = async () => {
+      const token = localStorage.getItem('authToken')
+      if (token) {
+        try {
+          const data = await authService.getCurrentUser()
           if (data.user) {
             setCurrentUser(data.user)
           }
-        })
-        .catch(() => {
-          localStorage.removeItem('authToken')
-        })
-        .finally(() => setUserLoading(false))
-    } else {
+        } catch (err) {
+          // Якщо токен недійсний, axios interceptor видалить його та перенаправить на логін
+          console.error('Failed to fetch user:', err)
+        }
+      }
       setUserLoading(false)
     }
+    fetchUser()
   }, [])
 
   const isModerator = currentUser?.role === 'MODERATOR';
-  console.info(currentUser);
   const isOwner = selectedEvent?.creator_id === currentUser?.id;
   const isEditMode = !!selectedEvent;
   const hasEventAccess = isOwner || isModerator;
 
-  // Трансформація даних з API в формат компонента
   const transformEvents = (dbEvents) => {
     return dbEvents.map((event) => ({
       id: event.id,
@@ -67,22 +63,16 @@ export default function HomePage() {
       date: event.event_date ? new Date(event.event_date).toLocaleDateString('uk-UA') : '',
       location: event.location,
       description: event.description,
-      // category: 'Захід', // Можна додати категорію в БД пізніше
       participants: event.participant_count || 0,
     }))
   }
 
-  // Завантаження даних з БД
   useEffect(() => {
     const fetchEvents = async () => {
       try {
         setLoading(true)
         setError(null)
-        const response = await fetch(`${API_URL}/events`)
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-        const data = await response.json()
+        const data = await eventService.getEvents()
         setEvents(transformEvents(data))
       } catch (err) {
         console.error('Помилка при завантаженні подій:', err)
@@ -97,7 +87,6 @@ export default function HomePage() {
     fetchEvents()
   }, [])
 
-  // Обробка змін у формі
   const handleFormChange = (e) => {
     const { name, value, type, checked } = e.target
     setFormData((prev) => ({
@@ -106,16 +95,11 @@ export default function HomePage() {
     }))
   }
 
-  // Відкриття бічної панелі для редагування/перегляду івенту
   const handleEventClick = async (eventId) => {
     try {
-      const response = await fetch(`${API_URL}/events/${eventId}`)
-      if (!response.ok) throw new Error('Failed to fetch event')
-      const eventData = await response.json()
-      
+      const eventData = await eventService.getEventById(eventId)
       setSelectedEvent(eventData)
       
-      // Заповнюємо форму даними івенту
       setFormData({
         title: eventData.title || '',
         description: eventData.description || '',
@@ -135,21 +119,13 @@ export default function HomePage() {
     }
   }
 
-  // Видалення івенту
   const handleDeleteEvent = async () => {
     if (!selectedEvent) return
     
     try {
       setSubmitting(true)
-      const response = await fetch(`${API_URL}/events/${selectedEvent.id}`, {
-        method: 'DELETE',
-      })
+      await eventService.deleteEvent(selectedEvent.id)
 
-      if (!response.ok) {
-        throw new Error('Помилка при видаленні заходу')
-      }
-
-      // Оновлюємо список подій
       setEvents((prev) => prev.filter((e) => e.id !== selectedEvent.id))
       
       setShowCreatePanel(false)
@@ -163,12 +139,10 @@ export default function HomePage() {
     }
   }
 
-  // Відправка форми на сервер
   const handleCreateEvent = async (e) => {
     e.preventDefault()
     setFormError(null)
 
-    // Валідація
     if (!formData.title || !formData.location || !formData.event_date) {
       setFormError('Заповніть обов\'язкові поля: назва, локація, дата')
       return
@@ -176,9 +150,6 @@ export default function HomePage() {
 
     try {
       setSubmitting(true)
-      
-      const method = isEditMode ? 'PUT' : 'POST'
-      const url = isEditMode ? `${API_URL}/events/${selectedEvent.id}` : `${API_URL}/events`
       
       const payload = {
         title: formData.title,
@@ -192,29 +163,17 @@ export default function HomePage() {
         category: formData.category,
       }
 
-      // Для POST додаємо creator_id
       if (!isEditMode) {
         payload.creator_id = currentUser.id
       }
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
+      const responseData = isEditMode
+        ? await eventService.updateEvent(selectedEvent.id, payload)
+        : await eventService.createEvent(payload)
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `Помилка при ${isEditMode ? 'редагуванні' : 'створенні'} заходу`)
-      }
-
-      const responseData = await response.json()
       const newEvent = responseData.event || responseData
 
       if (isEditMode) {
-        // Оновлюємо список подій
         setEvents((prev) =>
           prev.map((e) =>
             e.id === selectedEvent.id
@@ -258,7 +217,7 @@ export default function HomePage() {
       })
     } catch (err) {
       console.error(`Помилка при ${selectedEvent ? 'редагуванні' : 'створенні'} заходу:`, err)
-      setFormError(err.message)
+      setFormError(err.response?.data?.error || err.message)
     } finally {
       setSubmitting(false)
     }
@@ -273,7 +232,6 @@ export default function HomePage() {
       return (
         event.title.toLowerCase().includes(query) ||
         event.description.toLowerCase().includes(query) ||
-        // event.category.toLowerCase().includes(query) ||
         event.location.toLowerCase().includes(query)
       )
     })
@@ -340,247 +298,34 @@ export default function HomePage() {
 
         <div className="card-list">
           {filteredEvents.map((event) => (
-            <article
-              key={event.id}
-              className="event-card"
-              onClick={() => handleEventClick(event.id)}
-              style={{ cursor: 'pointer' }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-                <h3>{event.title}</h3>
-                <span>{event.date}</span>
-              </div>
-              <p>{event.description}</p>
-              <p className="notice">
-                <strong>Локація:</strong> {event.location} · <strong>Учасників:</strong>{' '}
-                {event.participants}
-              </p>
-            </article>
+            <EventCard key={event.id} event={event} onClick={handleEventClick} />
           ))}
           {filteredEvents.length === 0 && !loading && (
             <p className="notice">За вашим запитом подій не знайдено. Спробуйте інші ключові слова.</p>
           )}
         </div>
-        {/* <div className="tasks-panel">
-          <div className="task-card">
-            <h4>Швидкі задачі організатора</h4>
-            <ul className="task-list">
-              <li>Перевірити список реєстрацій</li>
-              <li>Створити нову офлайн-подію</li>
-              <li>Відредагувати обрані заходи</li>
-              <li>Отримати контакти учасників</li>
-            </ul>
-          </div>
-          <div className="task-card">
-            <h4>Поточні процеси</h4>
-            <p className="notice">Автоматизація дозволяє зменшити час на координацію та обробку заявок.</p>
-          </div>
-        </div> */}
       </div>
 
-      {/* Бічна панель для створення заходу */}
       {showCreatePanel && (
-        <>
-          <aside className="create-event-panel">
-          <div className="panel-header">
-            <h2>{selectedEvent ? 'Деталі заходу' : 'Створити новий захід'}</h2>
-            <button
-              type="button"
-              className="close-btn"
-              onClick={() => {
-                setShowCreatePanel(false)
-                setSelectedEvent(null)
-              }}
-              aria-label="Закрити панель"
-            >
-              ✕
-            </button>
-          </div>
-
-          <form onSubmit={handleCreateEvent} className="create-event-form">
-              {isEditMode && !hasEventAccess && (
-                <div className="notice" style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#e8f4f8', borderRadius: '4px' }}>
-                  📖 Ви можете лише переглядати цей захід
-                </div>
-              )}
-
-              {formError && (
-                <div className="form-error">
-                  <p>❌ {formError}</p>
-                </div>
-              )}
-
-              <div className="form-group">
-                <label htmlFor="title">Назва заходу *</label>
-                <input
-                  type="text"
-                  id="title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleFormChange}
-                  placeholder="Турнір Catan, Вечір ігор, тощо"
-                  required
-                />
-              </div>
-
-              {/* <div className="form-group">
-                <label htmlFor="description">Опис</label>
-                <input
-                  className="big"
-                  type="text"
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleFormChange}
-                  placeholder="Розповідайте про захід, хто може взяти участь, що очікувати"
-                  // rows="4"
-                />
-              </div> */}
-
-              <div className="form-group">
-                <label htmlFor="location">Місце проведення *</label>
-                <input
-                  type="text"
-                  id="location"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleFormChange}
-                  placeholder="Адреса або назва закладу"
-                  required
-                />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="latitude">Широта</label>
-                  <input
-                    type="number"
-                    id="latitude"
-                    name="latitude"
-                    value={formData.latitude}
-                    onChange={handleFormChange}
-                    placeholder="50.4501"
-                    step="0.0001"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="longitude">Довгота</label>
-                  <input
-                    type="number"
-                    id="longitude"
-                    name="longitude"
-                    value={formData.longitude}
-                    onChange={handleFormChange}
-                    placeholder="30.5234"
-                    step="0.0001"
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="event_date">Дата та час *</label>
-                <input
-                  type="datetime-local"
-                  id="event_date"
-                  name="event_date"
-                  value={formData.event_date}
-                  onChange={handleFormChange}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="max_participants">Максимальна кількість учасників</label>
-                <input
-                  type="number"
-                  id="max_participants"
-                  name="max_participants"
-                  value={formData.max_participants}
-                  onChange={handleFormChange}
-                  placeholder="16"
-                  min="1"
-                />
-              </div>
-
-              {(!isEditMode || hasEventAccess) && (
-                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between' }}>
-                  <label htmlFor="is_private" style={{ margin: 0 }}>Приватний захід</label>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      id="is_private"
-                      name="is_private"
-                      checked={formData.is_private}
-                      onChange={handleFormChange}
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
-              )}
-
-              <div className="form-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => {
-                    setShowCreatePanel(false)
-                    setSelectedEvent(null)
-                  }}
-                >
-                  {selectedEvent ? 'Закрити' : 'Скасувати'}
-                </button>
-                {isEditMode && (selectedEvent?.creator_id === currentUser?.id || isModerator) && (
-                  <button
-                    type="button"
-                    className="button button-danger"
-                    onClick={() => setShowDeleteConfirm(true)}
-                    title="Видалити захід"
-                  >
-                    🗑️
-                  </button>
-                )}
-                {(!isEditMode || hasEventAccess) && (
-                  <button
-                    type="submit"
-                    className="button button-primary"
-                    disabled={submitting}
-                  >
-                    {submitting
-                      ? (selectedEvent ? 'Збереження...' : 'Створення...')
-                      : (selectedEvent ? 'Зберегти' : 'Створити захід')}
-                  </button>
-                )}
-              </div>
-            </form>
-          </aside>
-          {showDeleteConfirm && (
-            <div className="delete-confirm-modal">
-              <div className="delete-confirm-content">
-                <h3>Видалити захід?</h3>
-                <p>Ви впевнені, що хочете видалити захід <strong>{selectedEvent?.title}</strong>?</p>
-                <p className="delete-confirm-warning">Ця дія не може бути скасована.</p>
-                <div className="delete-confirm-actions">
-                  <button
-                    type="button"
-                    className="button button-secondary"
-                    onClick={() => setShowDeleteConfirm(false)}
-                    disabled={submitting}
-                  >
-                    Скасувати
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-danger"
-                    onClick={handleDeleteEvent}
-                    disabled={submitting}
-                  >
-                    {submitting ? 'Видалення...' : 'Видалити'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
+        <EventFormPanel
+          selectedEvent={selectedEvent}
+          currentUser={currentUser}
+          isModerator={isModerator}
+          formData={formData}
+          formError={formError}
+          submitting={submitting}
+          isEditMode={isEditMode}
+          hasEventAccess={hasEventAccess}
+          handleFormChange={handleFormChange}
+          handleCreateEvent={handleCreateEvent}
+          handleDeleteEvent={handleDeleteEvent}
+          onClose={() => {
+            setShowCreatePanel(false)
+            setSelectedEvent(null)
+          }}
+          showDeleteConfirm={showDeleteConfirm}
+          setShowDeleteConfirm={setShowDeleteConfirm}
+        />
       )}
     </main>
       <Footer />
