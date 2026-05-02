@@ -6,10 +6,17 @@ import EventCard from '../components/EventCard'
 import EventFormPanel from '../components/EventFormPanel'
 import { eventService } from '../services/eventService'
 import { authService } from '../services/authService'
-import mockEvents from '../data/mockEvents'
+// import mockEvents from '../data/mockEvents'
+import { EVENT_CATEGORIES } from '../utils/categories'
 
 export default function HomePage() {
   const [search, setSearch] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
+  const [filterMyEvents, setFilterMyEvents] = useState(false)
+  const [filterJoined, setFilterJoined] = useState(false)
+  const [filterMinParticipants, setFilterMinParticipants] = useState('')
+  const [filterMaxParticipants, setFilterMaxParticipants] = useState('')
+  const [filterDate, setFilterDate] = useState('')
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -42,7 +49,7 @@ export default function HomePage() {
             setCurrentUser(data.user)
           }
         } catch (err) {
-          // Якщо токен недійсний, axios interceptor видалить його та перенаправить на логін
+          // Invalid token is handled by axios interceptor
           console.error('Failed to fetch user:', err)
         }
       }
@@ -61,9 +68,14 @@ export default function HomePage() {
       id: event.id,
       title: event.title,
       date: event.event_date ? new Date(event.event_date).toLocaleDateString('uk-UA') : '',
+      event_date_raw: event.event_date,
       location: event.location,
       description: event.description,
       participants: event.participant_count || 0,
+      max_participants: event.max_participants,
+      category: event.category,
+      creator_id: event.creator_id,
+      participant_ids: Array.isArray(event.participant_ids) ? event.participant_ids : [],
     }))
   }
 
@@ -77,8 +89,8 @@ export default function HomePage() {
       } catch (err) {
         console.error('Помилка при завантаженні подій:', err)
         setError(err.message)
-        // Fallback на mock дані
-        setEvents(mockEvents)
+        // Fallback to mock data
+        // setEvents(mockEvents)
       } finally {
         setLoading(false)
       }
@@ -136,6 +148,42 @@ export default function HomePage() {
       setFormError(err.message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleJoinEvent = async (eventId) => {
+    try {
+      setSubmitting(true);
+      setFormError(null);
+      await eventService.joinEvent(eventId);
+      
+      const updatedEvent = await eventService.getEventById(eventId);
+      setSelectedEvent(updatedEvent);
+      
+      setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, participants: updatedEvent.participants.length } : e));
+    } catch (err) {
+      console.error('Error joining event:', err);
+      setFormError(err.response?.data?.error || err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const handleLeaveEvent = async (eventId) => {
+    try {
+      setSubmitting(true);
+      setFormError(null);
+      await eventService.leaveEvent(eventId);
+      
+      const updatedEvent = await eventService.getEventById(eventId);
+      setSelectedEvent(updatedEvent);
+      
+      setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, participants: updatedEvent.participants.length } : e));
+    } catch (err) {
+      console.error('Error leaving event:', err);
+      setFormError(err.response?.data?.error || err.message);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -224,18 +272,46 @@ export default function HomePage() {
   }
 
   const filteredEvents = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) {
-      return events
-    }
     return events.filter((event) => {
-      return (
-        event.title.toLowerCase().includes(query) ||
-        event.description.toLowerCase().includes(query) ||
-        event.location.toLowerCase().includes(query)
-      )
+      // 1. Пошук (назва, опис, локація)
+      const query = search.trim().toLowerCase()
+      const matchesSearch = !query || 
+        event.title?.toLowerCase().includes(query) ||
+        event.description?.toLowerCase().includes(query) ||
+        event.location?.toLowerCase().includes(query)
+
+      // 2. Категорія
+      const matchesCategory = !filterCategory || event.category === filterCategory
+
+      // 3. Створені мною
+      const userId = currentUser?.id
+      const matchesMyEvents = !filterMyEvents || (userId && Number(event.creator_id) === Number(userId))
+
+      // 4. Я учасник
+      const matchesJoined = !filterJoined || (userId && event.participant_ids?.some(pId => Number(pId) === Number(userId)))
+
+      // 5. Мінімальна кількість людей (поточних учасників)
+      const minParts = parseInt(filterMinParticipants, 10)
+      const matchesMinParticipants = !filterMinParticipants || isNaN(minParts) || 
+        (event.participants >= minParts)
+
+      // 6. Максимальна кількість людей (ліміт учасників)
+      const maxParts = parseInt(filterMaxParticipants, 10)
+      const matchesMaxParticipants = !filterMaxParticipants || isNaN(maxParts) || 
+        (event.max_participants && event.max_participants <= maxParts)
+
+      // 7. Дата (захід після вибраної дати)
+      let matchesDate = true
+      if (filterDate && event.event_date_raw) {
+        // Ми порівнюємо лише дати без часу
+        const eventDay = new Date(event.event_date_raw).setHours(0,0,0,0)
+        const filterDay = new Date(filterDate).setHours(0,0,0,0)
+        matchesDate = eventDay >= filterDay
+      }
+
+      return matchesSearch && matchesCategory && matchesMyEvents && matchesJoined && matchesMinParticipants && matchesMaxParticipants && matchesDate
     })
-  }, [search, events])
+  }, [search, events, filterCategory, filterMyEvents, filterJoined, filterMinParticipants, filterMaxParticipants, filterDate, currentUser])
 
   if (userLoading) {
     return (
@@ -288,6 +364,74 @@ export default function HomePage() {
             )}
           </div>
 
+          <div className="filters-bar premium-filters">
+            <select 
+              value={filterCategory} 
+              onChange={e => setFilterCategory(e.target.value)} 
+              className="premium-filter-input"
+            >
+              <option value="">Всі категорії</option>
+              {EVENT_CATEGORIES.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.label}</option>
+              ))}
+            </select>
+            
+            <div className="filter-input-wrapper">
+              <span className="filter-icon">👥</span>
+              <input 
+                type="number" 
+                placeholder="Мін. учасників" 
+                value={filterMinParticipants} 
+                onChange={e => setFilterMinParticipants(e.target.value)}
+                min="0"
+                className="premium-filter-input number-input-no-arrows"
+              />
+            </div>
+            
+            <div className="filter-input-wrapper">
+              <span className="filter-icon">👥</span>
+              <input 
+                type="number" 
+                placeholder="Макс. учасників" 
+                value={filterMaxParticipants} 
+                onChange={e => setFilterMaxParticipants(e.target.value)}
+                min="1"
+                className="premium-filter-input number-input-no-arrows"
+              />
+            </div>
+            
+            <div className="filter-input-wrapper">
+              <span className="filter-icon">📅</span>
+              <input 
+                type="date" 
+                value={filterDate} 
+                onChange={e => setFilterDate(e.target.value)}
+                className="premium-filter-input"
+              />
+            </div>
+            
+            <div className="premium-checkbox-group">
+              <label className="premium-checkbox-label">
+                <input 
+                  type="checkbox" 
+                  checked={filterMyEvents} 
+                  onChange={e => setFilterMyEvents(e.target.checked)} 
+                  className="premium-checkbox" 
+                />
+                <span className="premium-checkbox-text">Мої</span>
+              </label>
+              <label className="premium-checkbox-label">
+                <input 
+                  type="checkbox" 
+                  checked={filterJoined} 
+                  onChange={e => setFilterJoined(e.target.checked)} 
+                  className="premium-checkbox" 
+                />
+                <span className="premium-checkbox-text">Участвую</span>
+              </label>
+            </div>
+          </div>
+
         {loading && <p className="notice">⏳ Завантаження подій...</p>}
 
         {error && (
@@ -319,6 +463,8 @@ export default function HomePage() {
           handleFormChange={handleFormChange}
           handleCreateEvent={handleCreateEvent}
           handleDeleteEvent={handleDeleteEvent}
+          handleJoinEvent={handleJoinEvent}
+          handleLeaveEvent={handleLeaveEvent}
           onClose={() => {
             setShowCreatePanel(false)
             setSelectedEvent(null)

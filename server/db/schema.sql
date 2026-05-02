@@ -1,13 +1,13 @@
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
-  phone_number VARCHAR(20) NOT NULL UNIQUE,
+  phone_number VARCHAR(20) UNIQUE,
   full_name VARCHAR(255) NOT NULL,
   nickname VARCHAR(100) NOT NULL UNIQUE,
   age INT,
   photo_url TEXT,
   bio TEXT,
-  email VARCHAR(255) UNIQUE,
+  email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255),
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS event_participants (
   id SERIAL PRIMARY KEY,
   event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status VARCHAR(50) DEFAULT 'registered', -- registered, confirmed, cancelled, attended
+  status VARCHAR(50) DEFAULT 'registered', -- registered, confirmed, cancelled
   registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(event_id, user_id)
 );

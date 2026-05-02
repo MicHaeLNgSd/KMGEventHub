@@ -1,0 +1,9 @@
+.event-card-clickable {
+  cursor: pointer;
+}
+
+.event-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}

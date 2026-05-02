@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import pool from './db/config.js';
 import { generateToken, verifyToken } from './config/jwt.js';
 
@@ -16,10 +18,87 @@ const isValidPhoneNumber = (phone) => {
 
 const app = express();
 const PORT = process.env.SERVER_PORT || 3000;
+const httpServer = createServer(app);
+
+// Setup Socket.io
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*', // Allow all origins for development
+    methods: ['GET', 'POST', 'PUT', 'DELETE']
+  }
+});
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Socket.io Authentication Middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error('Authentication error: Token missing'));
+  }
+  try {
+    const decoded = verifyToken(token);
+    socket.user = decoded;
+    next();
+  } catch (err) {
+    return next(new Error('Authentication error: Invalid token'));
+  }
+});
+
+// Socket.io Connection & Events
+io.on('connection', (socket) => {
+  console.log(`User connected to socket: ${socket.user.id}`);
+
+  socket.on('joinEvent', (eventId) => {
+    socket.join(`event_${eventId}`);
+    console.log(`User ${socket.user.id} joined event_${eventId}`);
+  });
+
+  socket.on('leaveEvent', (eventId) => {
+    socket.leave(`event_${eventId}`);
+    console.log(`User ${socket.user.id} left event_${eventId}`);
+  });
+
+  socket.on('sendMessage', async (data) => {
+    try {
+      const { eventId, text } = data;
+      const senderId = socket.user.id;
+
+      if (!text || !text.trim()) return;
+
+      const result = await pool.query(
+        `INSERT INTO messages (event_id, sender_id, text)
+         VALUES ($1, $2, $3)
+         RETURNING id, text, created_at`,
+        [eventId, senderId, text.trim()]
+      );
+
+      const message = result.rows[0];
+      const userResult = await pool.query('SELECT id, full_name, nickname FROM users WHERE id = $1', [senderId]);
+      const sender = userResult.rows[0];
+
+      const newMessage = {
+        id: message.id,
+        text: message.text,
+        created_at: message.created_at,
+        sender_id: sender.id,
+        sender_name: sender.full_name,
+        sender_nickname: sender.nickname
+      };
+
+      io.to(`event_${eventId}`).emit('newMessage', newMessage);
+    } catch (err) {
+      console.error('Socket sendMessage error:', err);
+      socket.emit('messageError', { error: 'Помилка при відправці повідомлення' });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`User disconnected from socket: ${socket.user.id}`);
+  });
+});
 
 // Authentication middleware
 const authenticateToken = async (req, res, next) => {
@@ -39,7 +118,7 @@ const authenticateToken = async (req, res, next) => {
     req.user = userResult.rows[0];
     next();
   } catch (error) {
-    res.status(403).json({ error: 'Invalid or expired token' });
+    res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
 
@@ -60,6 +139,37 @@ app.get('/api/users', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Update online status
+app.put('/api/users/status', authenticateToken, async (req, res) => {
+  try {
+    const { is_active } = req.body;
+    await pool.query('UPDATE users SET is_active = $1 WHERE id = $2', [is_active, req.user.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Offline beacon endpoint (no auth middleware because it uses sendBeacon)
+app.post('/api/users/offline', async (req, res) => {
+  try {
+    let token = req.query.token;
+    
+    if (!token && req.body && req.body.token) {
+      token = req.body.token;
+    }
+
+    if (!token) return res.status(400).json({ error: 'Token required' });
+    
+    const decoded = verifyToken(token);
+    await pool.query('UPDATE users SET is_active = false WHERE id = $1', [decoded.id]);
+    res.json({ success: true });
+  } catch (error) {
+    // We ignore invalid token errors for beacon
+    res.status(400).json({ error: 'Invalid or expired token' });
   }
 });
 
@@ -88,13 +198,15 @@ app.get('/api/events', async (req, res) => {
         e.location,
         e.event_date,
         e.max_participants,
+        e.category,
         u.id as creator_id,
         u.full_name as creator_name,
         u.nickname as creator_nickname,
-        COUNT(ep.id) as participant_count
+        COUNT(ep.id) as participant_count,
+        COALESCE(json_agg(ep.user_id) FILTER (WHERE ep.user_id IS NOT NULL), '[]'::json) as participant_ids
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
-      LEFT JOIN event_participants ep ON e.id = ep.event_id
+      LEFT JOIN event_participants ep ON e.id = ep.event_id AND ep.status IN ('approved', 'pending', 'registered')
       GROUP BY e.id, u.id
       ORDER BY e.event_date ASC
     `);
@@ -462,6 +574,108 @@ app.delete('/api/events/:id', async (req, res) => {
   }
 });
 
+// Join event
+app.post('/api/events/:id/join', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // Check if user is already a participant
+    const existing = await pool.query('SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2', [id, userId]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Ви вже є учасником цього заходу' });
+    }
+
+    const result = await pool.query(
+      "INSERT INTO event_participants (event_id, user_id, status) VALUES ($1, $2, 'pending') RETURNING id, status",
+      [id, userId]
+    );
+
+    res.status(201).json({ message: 'Ви успішно приєдналися до заходу', participant: result.rows[0] });
+  } catch (error) {
+    console.error('Error joining event:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Leave event
+app.delete('/api/events/:id/leave', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2 RETURNING id',
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ви не є учасником цього заходу' });
+    }
+
+    res.json({ message: 'Ви успішно покинули захід' });
+  } catch (error) {
+    console.error('Error leaving event:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get messages for event
+app.get('/api/events/:id/messages', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const result = await pool.query(`
+      SELECT m.id, m.text, m.created_at, u.id as sender_id, u.full_name as sender_name, u.nickname as sender_nickname
+      FROM messages m
+      JOIN users u ON m.sender_id = u.id
+      WHERE m.event_id = $1
+      ORDER BY m.created_at ASC
+    `, [id]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send message to event
+app.post('/api/events/:id/messages', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { text } = req.body;
+    const sender_id = req.user.id;
+
+    if (!text || text.trim() === '') {
+      return res.status(400).json({ error: 'Повідомлення не може бути порожнім' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO messages (event_id, sender_id, text)
+       VALUES ($1, $2, $3)
+       RETURNING id, text, created_at`,
+      [id, sender_id, text.trim()]
+    );
+
+    const message = result.rows[0];
+    const userResult = await pool.query('SELECT id, full_name, nickname FROM users WHERE id = $1', [sender_id]);
+    const sender = userResult.rows[0];
+
+    res.status(201).json({
+      id: message.id,
+      text: message.text,
+      created_at: message.created_at,
+      sender_id: sender.id,
+      sender_name: sender.full_name,
+      sender_nickname: sender.nickname
+    });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -469,7 +683,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`✓ Server running on http://localhost:${PORT}`);
   console.log(`✓ Database: ${process.env.POSTGRES_DB || 'kmg_events_db'}`);
 });

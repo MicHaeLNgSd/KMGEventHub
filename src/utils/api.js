@@ -4,7 +4,7 @@ const API = axios.create({
   baseURL: '/api'
 })
 
-// Request interceptor - додає токен до кожного запиту
+// Request interceptor - adds token to each request
 API.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('authToken')
@@ -18,7 +18,7 @@ API.interceptors.request.use(
   }
 )
 
-// Response interceptor - обробляє 401 та видаляє токен
+// Response interceptor - handles 401 and removes token
 API.interceptors.response.use(
   (response) => response,
   (error) => {

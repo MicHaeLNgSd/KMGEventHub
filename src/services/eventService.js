@@ -24,5 +24,25 @@ export const eventService = {
   deleteEvent: async (eventId) => {
     const response = await API.delete(`/events/${eventId}`);
     return response.data;
+  },
+
+  joinEvent: async (eventId) => {
+    const response = await API.post(`/events/${eventId}/join`);
+    return response.data;
+  },
+
+  leaveEvent: async (eventId) => {
+    const response = await API.delete(`/events/${eventId}/leave`);
+    return response.data;
+  },
+
+  getEventMessages: async (eventId) => {
+    const response = await API.get(`/events/${eventId}/messages`);
+    return response.data;
+  },
+
+  sendEventMessage: async (eventId, text) => {
+    const response = await API.post(`/events/${eventId}/messages`, { text });
+    return response.data;
   }
 };

@@ -7,11 +7,13 @@ import AccountPage from './pages/AccountPage'
 import ContactPage from './pages/ContactPage'
 import AboutPage from './pages/AboutPage'
 import API from './utils/api'
+import { useOnlineStatus } from './hooks/useOnlineStatus'
 import './App.css'
 
 function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  useOnlineStatus()
 
   useEffect(() => {
     const token = localStorage.getItem('authToken')

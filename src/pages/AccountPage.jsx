@@ -7,6 +7,7 @@ import API from '../utils/api'
 import { authService } from '../services/authService'
 import { validateAge, validatePhone } from '../utils/validators'
 import { formatPhoneInput } from '../utils/formatters'
+import './AccountPage.css'
 
 export default function AccountPage() {
   const [user, setUser] = useState(null)
@@ -34,11 +35,9 @@ export default function AccountPage() {
     const fetchUser = async () => {
       try {
         setLoading(true)
-        // Спочатку отримати базові дані користувача
         const meResponse = await authService.getCurrentUser()
         const currentUser = meResponse.user
 
-        // Потім отримати повні дані
         const response = await API.get(`/users/${currentUser.id}`)
         const data = response.data
         setUser(data)
@@ -59,7 +58,30 @@ export default function AccountPage() {
     }
 
     fetchUser()
+
+    const handleVisibility = () => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        return { ...prev, is_active: document.visibilityState === 'visible' };
+      });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [navigate])
+
+  const handleLogout = async () => {
+    try {
+      await API.put('/users/status', { is_active: false })
+    } catch (error) {
+      console.error('Failed to set offline status:', error)
+    }
+    localStorage.removeItem('authToken')
+    navigate('/login')
+  }
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -136,15 +158,31 @@ export default function AccountPage() {
 
       <main className="app-shell">
         <div className="page-card profile-card">
+          <button 
+            type="button" 
+            className="button button-danger account-logout-btn" 
+            onClick={handleLogout}
+          >
+            Вийти
+          </button>
           <div className="profile-header">
-            <div className="profile-avatar-block">
-              <img src={avatarPlaceholder} alt="Аватар" className="profile-avatar" />
+            <div className="profile-avatar-container">
+              <div className="profile-avatar-block">
+                <img src={avatarPlaceholder} alt="Аватар" className="profile-avatar" />
+              </div>
+              <div 
+                title={user?.is_active ? 'Активний' : 'Неактивний'}
+                className={`profile-status-indicator ${user?.is_active ? 'profile-status-active' : 'profile-status-inactive'}`}
+              />
             </div>
             <div className="profile-details">
               <p className="notice">Ваш обліковий запис</p>
               <h2>{user?.full_name || 'Користувач'}</h2>
               <p>@{user?.nickname || 'nickname'}</p>
               <p>{user?.email}</p>
+              <p className="profile-created-at">
+                Зареєстровано: {user?.created_at ? new Date(user.created_at).toLocaleDateString('uk-UA') : '—'}
+              </p>
             </div>
           </div>
 
@@ -216,18 +254,6 @@ export default function AccountPage() {
                   placeholder="Розповідайте про себе..."
                   rows="4"
                 />
-              </div>
-              <div className="profile-field">
-                <label>Створено</label>
-                <div className="profile-readonly">
-                  {user?.created_at ? new Date(user.created_at).toLocaleDateString('uk-UA') : '—'}
-                </div>
-              </div>
-              <div className="profile-field">
-                <label>Статус</label>
-                <div className="profile-readonly">
-                  {user?.is_active ? '✓ Активний' : '✗ Неактивний'}
-                </div>
               </div>
             </div>
 
