@@ -4,7 +4,7 @@ export default function TopBar() {
   const navigate = useNavigate()
 
   const handleLogout = () => {
-    localStorage.removeItem('currentUser')
+    localStorage.removeItem('authToken')
     navigate('/login')
   }
 

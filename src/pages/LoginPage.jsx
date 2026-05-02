@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import API from '../utils/api'
 
 export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' })
@@ -25,11 +26,14 @@ export default function LoginPage() {
         return
       }
 
-      localStorage.setItem('currentUser', JSON.stringify(data.user))
+      if (data.token) {
+        localStorage.setItem('authToken', data.token)
+      }
       navigate('/home')
-    } catch (fetchError) {
-      setError('Помилка підключення до сервера. Спробуйте пізніше.')
-      console.error('Login error:', fetchError)
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Помилка підключення до сервера. Спробуйте пізніше.'
+      setError(errorMsg)
+      console.error('Login error:', error)
     } finally {
       setIsSubmitting(false)
     }

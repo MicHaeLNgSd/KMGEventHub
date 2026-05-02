@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import avatarPlaceholder from '../assets/avatar-placeholder.svg'
+import API from '../utils/api'
 
 export default function AccountPage() {
   const [user, setUser] = useState(null)
@@ -21,14 +22,8 @@ export default function AccountPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('currentUser')
-    if (!storedUser) {
-      navigate('/login')
-      return
-    }
-
-    const currentUser = JSON.parse(storedUser)
-    if (!currentUser?.id) {
+    const token = localStorage.getItem('authToken')
+    if (!token) {
       navigate('/login')
       return
     }
@@ -36,11 +31,13 @@ export default function AccountPage() {
     const fetchUser = async () => {
       try {
         setLoading(true)
-        const response = await fetch(`/api/users/${currentUser.id}`)
-        if (!response.ok) {
-          throw new Error('Не вдалося завантажити дані користувача.')
-        }
-        const data = await response.json()
+        // Спочатку отримати базові дані користувача
+        const meResponse = await API.get('/auth/me')
+        const currentUser = meResponse.data.user
+
+        // Потім отримати повні дані
+        const response = await API.get(`/users/${currentUser.id}`)
+        const data = response.data
         setUser(data)
         setForm({
           full_name: data.full_name || '',
@@ -103,31 +100,21 @@ export default function AccountPage() {
 
     try {
       setSaving(true)
-      const response = await fetch(`/api/users/${user.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          full_name: form.full_name.trim(),
-          nickname: form.nickname.trim(),
-          email: form.email.trim().toLowerCase(),
-          age: trimmedAge || null,
-          phone_number: trimmedPhone || null,
-          bio: form.bio.trim() || null
-        })
+      const response = await API.put(`/users/${user.id}`, {
+        full_name: form.full_name.trim(),
+        nickname: form.nickname.trim(),
+        email: form.email.trim().toLowerCase(),
+        age: trimmedAge || null,
+        phone_number: trimmedPhone || null,
+        bio: form.bio.trim() || null
       })
 
-      const data = await response.json()
-      if (!response.ok) {
-        setError(data.error || 'Не вдалося оновити профіль.')
-        return
-      }
-
-      setUser(data.user)
+      setUser(response.data.user)
       setMessage('Профіль успішно збережено.')
-      localStorage.setItem('currentUser', JSON.stringify(data.user))
+      // User data is now fetched via API on each load
     } catch (saveError) {
       console.error('Account save error:', saveError)
-      setError('Помилка збереження профілю. Спробуйте пізніше.')
+      setError(saveError.response?.data?.error || 'Помилка збереження профілю. Спробуйте пізніше.')
     } finally {
       setSaving(false)
     }

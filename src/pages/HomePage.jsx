@@ -13,10 +13,9 @@ export default function HomePage() {
   const [error, setError] = useState(null)
   const [showCreatePanel, setShowCreatePanel] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState(null)
-  const [currentUser] = useState(() => {
-    const user = localStorage.getItem('currentUser')
-    return user ? JSON.parse(user) : null
-  })
+  const [currentUser, setCurrentUser] = useState(null)
+  const [userLoading, setUserLoading] = useState(true)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -30,7 +29,35 @@ export default function HomePage() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState(null)
-  // const navigate = useNavigate()
+
+  useEffect(() => {
+    const token = localStorage.getItem('authToken')
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.user) {
+            setCurrentUser(data.user)
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('authToken')
+        })
+        .finally(() => setUserLoading(false))
+    } else {
+      setUserLoading(false)
+    }
+  }, [])
+
+  const isModerator = currentUser?.role === 'MODERATOR';
+  console.info(currentUser);
+  const isOwner = selectedEvent?.creator_id === currentUser?.id;
+  const isEditMode = !!selectedEvent;
+  const hasEventAccess = isOwner || isModerator;
 
   // Трансформація даних з API в формат компонента
   const transformEvents = (dbEvents) => {
@@ -108,8 +135,34 @@ export default function HomePage() {
     }
   }
 
-  const isEditMode = !!selectedEvent;
-  const isEditAllowed = selectedEvent?.creator_id === currentUser?.id;
+  // Видалення івенту
+  const handleDeleteEvent = async () => {
+    if (!selectedEvent) return
+    
+    try {
+      setSubmitting(true)
+      const response = await fetch(`${API_URL}/events/${selectedEvent.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Помилка при видаленні заходу')
+      }
+
+      // Оновлюємо список подій
+      setEvents((prev) => prev.filter((e) => e.id !== selectedEvent.id))
+      
+      setShowCreatePanel(false)
+      setSelectedEvent(null)
+      setShowDeleteConfirm(false)
+    } catch (err) {
+      console.error('Помилка при видаленні заходу:', err)
+      setFormError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   // Відправка форми на сервер
   const handleCreateEvent = async (e) => {
     e.preventDefault()
@@ -226,6 +279,18 @@ export default function HomePage() {
     })
   }, [search, events])
 
+  if (userLoading) {
+    return (
+      <div className="page-shell">
+        <Header />
+        <main className="app-shell">
+          <div className="page-card">Завантаження...</div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
   return (
     <div className={`page-shell ${showCreatePanel ? 'with-panel' : ''}`}>
       <Header />
@@ -240,27 +305,29 @@ export default function HomePage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            <button
-              type="button"
-              className="button"
-              onClick={() => {
-                setSelectedEvent(null)
-                setFormData({
-                  title: '',
-                  description: '',
-                  location: '',
-                  latitude: '',
-                  longitude: '',
-                  event_date: '',
-                  max_participants: '',
-                  is_private: false,
-                  category: '',
-                })
-                setShowCreatePanel(true)
-              }}
-            >
-              Створити подію
-            </button>
+            {!isModerator && (
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  setSelectedEvent(null)
+                  setFormData({
+                    title: '',
+                    description: '',
+                    location: '',
+                    latitude: '',
+                    longitude: '',
+                    event_date: '',
+                    max_participants: '',
+                    is_private: false,
+                    category: '',
+                  })
+                  setShowCreatePanel(true)
+                }}
+              >
+                Створити подію
+              </button>
+            )}
           </div>
 
         {loading && <p className="notice">⏳ Завантаження подій...</p>}
@@ -313,7 +380,8 @@ export default function HomePage() {
 
       {/* Бічна панель для створення заходу */}
       {showCreatePanel && (
-        <aside className="create-event-panel">
+        <>
+          <aside className="create-event-panel">
           <div className="panel-header">
             <h2>{selectedEvent ? 'Деталі заходу' : 'Створити новий захід'}</h2>
             <button
@@ -330,7 +398,7 @@ export default function HomePage() {
           </div>
 
           <form onSubmit={handleCreateEvent} className="create-event-form">
-              {isEditMode && !isEditAllowed && (
+              {isEditMode && !hasEventAccess && (
                 <div className="notice" style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#e8f4f8', borderRadius: '4px' }}>
                   📖 Ви можете лише переглядати цей захід
                 </div>
@@ -434,7 +502,7 @@ export default function HomePage() {
                 />
               </div>
 
-              {(!isEditMode || isEditAllowed) && (
+              {(!isEditMode || hasEventAccess) && (
                 <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between' }}>
                   <label htmlFor="is_private" style={{ margin: 0 }}>Приватний захід</label>
                   <label className="toggle-switch">
@@ -461,7 +529,17 @@ export default function HomePage() {
                 >
                   {selectedEvent ? 'Закрити' : 'Скасувати'}
                 </button>
-                {(!isEditMode || isEditAllowed) && (
+                {isEditMode && (selectedEvent?.creator_id === currentUser?.id || isModerator) && (
+                  <button
+                    type="button"
+                    className="button button-danger"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    title="Видалити захід"
+                  >
+                    🗑️
+                  </button>
+                )}
+                {(!isEditMode || hasEventAccess) && (
                   <button
                     type="submit"
                     className="button button-primary"
@@ -475,6 +553,34 @@ export default function HomePage() {
               </div>
             </form>
           </aside>
+          {showDeleteConfirm && (
+            <div className="delete-confirm-modal">
+              <div className="delete-confirm-content">
+                <h3>Видалити захід?</h3>
+                <p>Ви впевнені, що хочете видалити захід <strong>{selectedEvent?.title}</strong>?</p>
+                <p className="delete-confirm-warning">Ця дія не може бути скасована.</p>
+                <div className="delete-confirm-actions">
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={submitting}
+                  >
+                    Скасувати
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-danger"
+                    onClick={handleDeleteEvent}
+                    disabled={submitting}
+                  >
+                    {submitting ? 'Видалення...' : 'Видалити'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </main>
       <Footer />

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import API from '../utils/api'
 
 const PHONE_REGEX = /^(?:\+?380|0)\d{9}$/
 
@@ -10,7 +11,8 @@ export default function RegisterPage() {
     age: '',
     phone: '',
     email: '',
-    password: ''
+    password: '',
+    role: ''
   })
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -36,32 +38,23 @@ export default function RegisterPage() {
     setIsSubmitting(true)
 
     try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          full_name: form.name.trim(),
-          nickname: form.nickname.trim(),
-          age: trimmedAge,
-          phone_number: trimmedPhone,
-          email: form.email.trim().toLowerCase(),
-          password: form.password
-        })
+      const response = await API.post('/auth/register', {
+        full_name: form.name.trim(),
+        nickname: form.nickname.trim(),
+        age: trimmedAge,
+        phone_number: trimmedPhone,
+        email: form.email.trim().toLowerCase(),
+        password: form.password
       })
 
-      const data = await response.json()
-      if (!response.ok) {
-        setError(data.error || 'Не вдалося зареєструватися. Перевірте дані.')
-        return
-      }
-
-      if (data.user) {
-        localStorage.setItem('currentUser', JSON.stringify(data.user))
+      if (response.data.token) {
+        localStorage.setItem('authToken', response.data.token)
       }
       navigate('/home')
-    } catch (fetchError) {
-      setError('Помилка підключення до сервера. Спробуйте пізніше.')
-      console.error('Register error:', fetchError)
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Помилка підключення до сервера. Спробуйте пізніше.'
+      setError(errorMsg)
+      console.error('Register error:', error)
     } finally {
       setIsSubmitting(false)
     }
