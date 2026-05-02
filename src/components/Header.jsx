@@ -26,7 +26,7 @@ export default function Header() {
     <header className="site-header">
       <div className="header-left">
         <Link to="/home" className="brand-link">
-          <span className="brand-logo">KMG</span>
+          <span className={`brand-logo ${isModerator ? 'admin' : ''}`}>KMG</span>
           <span className="brand-name">Offline Event Hub</span>
         </Link>
       </div>

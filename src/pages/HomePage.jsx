@@ -6,7 +6,6 @@ import EventCard from '../components/EventCard'
 import EventFormPanel from '../components/EventFormPanel'
 import { eventService } from '../services/eventService'
 import { authService } from '../services/authService'
-// import mockEvents from '../data/mockEvents'
 import { EVENT_CATEGORIES } from '../utils/categories'
 
 export default function HomePage() {
@@ -24,6 +23,9 @@ export default function HomePage() {
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [currentUser, setCurrentUser] = useState(null)
   const [userLoading, setUserLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalEvents, setTotalEvents] = useState(0)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
@@ -90,10 +92,14 @@ export default function HomePage() {
         search: search,
         userId: currentUser?.id,
         myEvents: filterMyEvents,
-        joinedEvents: filterJoined
+        joinedEvents: filterJoined,
+        page: currentPage,
+        limit: 10
       }
       const data = await eventService.getEvents(filters)
-      setEvents(transformEvents(data))
+      setEvents(transformEvents(data.events || []))
+      setTotalPages(data.totalPages || 1)
+      setTotalEvents(data.totalCount || 0)
       setError(null)
     } catch (err) {
       console.error('Помилка при завантаженні подій:', err)
@@ -104,6 +110,18 @@ export default function HomePage() {
   }
 
   useEffect(() => {
+    setCurrentPage(1)
+  }, [
+    filterCategory, 
+    filterMinParticipants, 
+    filterMaxParticipants, 
+    filterDate, 
+    filterMyEvents, 
+    filterJoined,
+    search
+  ])
+
+  useEffect(() => {
     fetchEvents()
   }, [
     filterCategory, 
@@ -112,10 +130,11 @@ export default function HomePage() {
     filterDate, 
     filterMyEvents, 
     filterJoined,
-    currentUser?.id
+    currentUser?.id,
+    currentPage
   ])
 
-  // Дебаунс для пошуку
+  // Search debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchEvents()
@@ -161,8 +180,8 @@ export default function HomePage() {
     try {
       setSubmitting(true)
       await eventService.deleteEvent(selectedEvent.id)
-
-      setEvents((prev) => prev.filter((e) => e.id !== selectedEvent.id))
+      
+      fetchEvents()
       
       setShowCreatePanel(false)
       setSelectedEvent(null)
@@ -184,7 +203,6 @@ export default function HomePage() {
       const updatedEvent = await eventService.getEventById(eventId);
       setSelectedEvent(updatedEvent);
       
-      // Оновлюємо список подій з сервера, щоб врахувати зміни в учасниках для фільтрів
       fetchEvents();
     } catch (err) {
       console.error('Error joining event:', err);
@@ -203,7 +221,6 @@ export default function HomePage() {
       const updatedEvent = await eventService.getEventById(eventId);
       setSelectedEvent(updatedEvent);
       
-      // Оновлюємо список подій з сервера, щоб врахувати зміни в учасниках для фільтрів
       fetchEvents();
     } catch (err) {
       console.error('Error leaving event:', err);
@@ -245,36 +262,7 @@ export default function HomePage() {
         ? await eventService.updateEvent(selectedEvent.id, payload)
         : await eventService.createEvent(payload)
 
-      const newEvent = responseData.event || responseData
-
-      if (isEditMode) {
-        setEvents((prev) =>
-          prev.map((e) =>
-            e.id === selectedEvent.id
-              ? {
-                  id: newEvent.id,
-                  title: newEvent.title,
-                  date: new Date(newEvent.event_date).toLocaleDateString('uk-UA'),
-                  location: newEvent.location,
-                  description: newEvent.description,
-                  participants: e.participants,
-                }
-              : e
-          )
-        )
-      } else {
-        setEvents((prev) => [
-          ...prev,
-          {
-            id: newEvent.id,
-            title: newEvent.title,
-            date: new Date(newEvent.event_date).toLocaleDateString('uk-UA'),
-            location: newEvent.location,
-            description: newEvent.description,
-            participants: 1,
-          },
-        ])
-      }
+      fetchEvents()
       
       setShowCreatePanel(false)
       setSelectedEvent(null)
@@ -296,9 +284,6 @@ export default function HomePage() {
       setSubmitting(false)
     }
   }
-
-  // Тепер ми просто використовуємо події з бекенду, оскільки вони вже відфільтровані
-  const filteredEvents = events;
 
   if (userLoading) {
     return (
@@ -428,13 +413,43 @@ export default function HomePage() {
         )}
 
         <div className="card-list">
-          {filteredEvents.map((event) => (
+          {events.map((event) => (
             <EventCard key={event.id} event={event} onClick={handleEventClick} />
           ))}
-          {filteredEvents.length === 0 && !loading && (
+          {events.length === 0 && !loading && (
             <p className="notice">За вашим запитом подій не знайдено. Спробуйте інші ключові слова.</p>
           )}
         </div>
+
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button 
+              className="pagination-btn" 
+              disabled={currentPage === 1} 
+              onClick={() => setCurrentPage(prev => prev - 1)}
+            >
+              ← Назад
+            </button>
+            <div className="pagination-pages">
+              {[...Array(totalPages)].map((_, i) => (
+                <button 
+                  key={i + 1}
+                  className={`pagination-page-btn ${currentPage === i + 1 ? 'active' : ''}`}
+                  onClick={() => setCurrentPage(i + 1)}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            <button 
+              className="pagination-btn" 
+              disabled={currentPage === totalPages} 
+              onClick={() => setCurrentPage(prev => prev + 1)}
+            >
+              Вперед →
+            </button>
+          </div>
+        )}
       </div>
 
       {showCreatePanel && (

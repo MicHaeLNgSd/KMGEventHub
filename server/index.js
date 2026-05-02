@@ -198,8 +198,14 @@ app.get('/api/events', async (req, res) => {
       userId, 
       myEvents, 
       joinedEvents,
-      search 
+      search,
+      page = 1,
+      limit = 10
     } = req.query;
+
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const offset = (parsedPage - 1) * parsedLimit;
 
     let queryText = `
       SELECT 
@@ -214,7 +220,8 @@ app.get('/api/events', async (req, res) => {
         u.full_name as creator_name,
         u.nickname as creator_nickname,
         COUNT(DISTINCT ep.id) as participant_count,
-        COALESCE(json_agg(DISTINCT ep.user_id) FILTER (WHERE ep.user_id IS NOT NULL), '[]'::json) as participant_ids
+        COALESCE(json_agg(DISTINCT ep.user_id) FILTER (WHERE ep.user_id IS NOT NULL), '[]'::json) as participant_ids,
+        COUNT(*) OVER() as total_count
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
       LEFT JOIN event_participants ep ON e.id = ep.event_id AND ep.status IN ('approved', 'pending', 'registered')
@@ -231,11 +238,6 @@ app.get('/api/events', async (req, res) => {
     if (startDate) {
       whereClauses.push(`e.event_date >= $${whereClauses.length + 1}`);
       queryParams.push(startDate);
-    }
-
-    if (minParticipants) {
-      // Note: This filters by CURRENT participants, not max limit
-      // We'll use HAVING for this or a subquery if needed, but for simplicity we'll check later
     }
 
     if (search) {
@@ -277,10 +279,18 @@ app.get('/api/events', async (req, res) => {
       }
     }
 
-    queryText += ' ORDER BY e.event_date ASC';
+    queryText += ` ORDER BY e.event_date ASC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+    queryParams.push(parsedLimit, offset);
 
     const result = await pool.query(queryText, queryParams);
-    res.json(result.rows);
+    const totalCount = result.rows.length > 0 ? parseInt(result.rows[0].total_count, 10) : 0;
+    
+    res.json({
+      events: result.rows,
+      totalCount,
+      totalPages: Math.ceil(totalCount / parsedLimit),
+      currentPage: parsedPage
+    });
   } catch (error) {
     console.error('Error fetching events:', error);
     res.status(500).json({ error: error.message });
@@ -552,7 +562,7 @@ app.post('/api/events', authenticateToken, async (req, res) => {
     const { title, description, location, latitude, longitude, event_date, max_participants, is_private, category } = req.body;
     const creator_id = req.user.id;
 
-    // Валідація
+    // Validation
     if (!creator_id || !title || !location || !event_date) {
       return res.status(400).json({ 
         error: 'Обов\'язкові поля: creator_id, title, location, event_date' 
@@ -580,7 +590,7 @@ app.put('/api/events/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { title, description, location, latitude, longitude, event_date, max_participants, is_private, category } = req.body;
 
-    // Перевірити, чи користувач має право редагувати
+    // Check if user has permission to edit
     const eventResult = await pool.query('SELECT creator_id FROM events WHERE id = $1', [id]);
     if (eventResult.rows.length === 0) {
       return res.status(404).json({ error: 'Event not found' });
