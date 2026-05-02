@@ -187,10 +187,21 @@ app.get('/api/users/:id', async (req, res) => {
   }
 });
 
-// Get all events
+// Get all events with optional filtering
 app.get('/api/events', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const { 
+      category, 
+      minParticipants, 
+      maxParticipants, 
+      startDate, 
+      userId, 
+      myEvents, 
+      joinedEvents,
+      search 
+    } = req.query;
+
+    let queryText = `
       SELECT 
         e.id, 
         e.title, 
@@ -202,16 +213,76 @@ app.get('/api/events', async (req, res) => {
         u.id as creator_id,
         u.full_name as creator_name,
         u.nickname as creator_nickname,
-        COUNT(ep.id) as participant_count,
-        COALESCE(json_agg(ep.user_id) FILTER (WHERE ep.user_id IS NOT NULL), '[]'::json) as participant_ids
+        COUNT(DISTINCT ep.id) as participant_count,
+        COALESCE(json_agg(DISTINCT ep.user_id) FILTER (WHERE ep.user_id IS NOT NULL), '[]'::json) as participant_ids
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
       LEFT JOIN event_participants ep ON e.id = ep.event_id AND ep.status IN ('approved', 'pending', 'registered')
-      GROUP BY e.id, u.id
-      ORDER BY e.event_date ASC
-    `);
+    `;
+
+    const whereClauses = [];
+    const queryParams = [];
+
+    if (category) {
+      whereClauses.push(`e.category = $${whereClauses.length + 1}`);
+      queryParams.push(category);
+    }
+
+    if (startDate) {
+      whereClauses.push(`e.event_date >= $${whereClauses.length + 1}`);
+      queryParams.push(startDate);
+    }
+
+    if (minParticipants) {
+      // Note: This filters by CURRENT participants, not max limit
+      // We'll use HAVING for this or a subquery if needed, but for simplicity we'll check later
+    }
+
+    if (search) {
+      whereClauses.push(`(e.title ILIKE $${whereClauses.length + 1} OR e.description ILIKE $${whereClauses.length + 1} OR e.location ILIKE $${whereClauses.length + 1})`);
+      queryParams.push(`%${search}%`);
+    }
+
+    if (userId) {
+      if (myEvents === 'true') {
+        whereClauses.push(`e.creator_id = $${whereClauses.length + 1}`);
+        queryParams.push(userId);
+      }
+      if (joinedEvents === 'true') {
+        whereClauses.push(`e.id IN (SELECT event_id FROM event_participants WHERE user_id = $${whereClauses.length + 1} AND status IN ('approved', 'pending', 'registered'))`);
+        queryParams.push(userId);
+      }
+    }
+
+    if (whereClauses.length > 0) {
+      queryText += ' WHERE ' + whereClauses.join(' AND ');
+    }
+
+    queryText += ' GROUP BY e.id, u.id';
+
+    // Min/Max participants check (current participants)
+    if (minParticipants || maxParticipants) {
+      const havingClauses = [];
+      if (minParticipants) {
+        havingClauses.push(`COUNT(DISTINCT ep.id) >= $${queryParams.length + 1}`);
+        queryParams.push(parseInt(minParticipants, 10));
+      }
+      if (maxParticipants) {
+        // Here maxParticipants means the USER'S FILTER for max limit
+        havingClauses.push(`e.max_participants <= $${queryParams.length + 1}`);
+        queryParams.push(parseInt(maxParticipants, 10));
+      }
+      if (havingClauses.length > 0) {
+        queryText += ' HAVING ' + havingClauses.join(' AND ');
+      }
+    }
+
+    queryText += ' ORDER BY e.event_date ASC';
+
+    const result = await pool.query(queryText, queryParams);
     res.json(result.rows);
   } catch (error) {
+    console.error('Error fetching events:', error);
     res.status(500).json({ error: error.message });
   }
 });

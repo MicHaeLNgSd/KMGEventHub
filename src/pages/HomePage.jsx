@@ -79,25 +79,49 @@ export default function HomePage() {
     }))
   }
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const data = await eventService.getEvents()
-        setEvents(transformEvents(data))
-      } catch (err) {
-        console.error('Помилка при завантаженні подій:', err)
-        setError(err.message)
-        // Fallback to mock data
-        // setEvents(mockEvents)
-      } finally {
-        setLoading(false)
+  const fetchEvents = async () => {
+    try {
+      setLoading(true)
+      const filters = {
+        category: filterCategory,
+        minParticipants: filterMinParticipants,
+        maxParticipants: filterMaxParticipants,
+        startDate: filterDate,
+        search: search,
+        userId: currentUser?.id,
+        myEvents: filterMyEvents,
+        joinedEvents: filterJoined
       }
+      const data = await eventService.getEvents(filters)
+      setEvents(transformEvents(data))
+      setError(null)
+    } catch (err) {
+      console.error('Помилка при завантаженні подій:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchEvents()
-  }, [])
+  }, [
+    filterCategory, 
+    filterMinParticipants, 
+    filterMaxParticipants, 
+    filterDate, 
+    filterMyEvents, 
+    filterJoined,
+    currentUser?.id
+  ])
+
+  // Дебаунс для пошуку
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchEvents()
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const handleFormChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -160,7 +184,8 @@ export default function HomePage() {
       const updatedEvent = await eventService.getEventById(eventId);
       setSelectedEvent(updatedEvent);
       
-      setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, participants: updatedEvent.participants.length } : e));
+      // Оновлюємо список подій з сервера, щоб врахувати зміни в учасниках для фільтрів
+      fetchEvents();
     } catch (err) {
       console.error('Error joining event:', err);
       setFormError(err.response?.data?.error || err.message);
@@ -178,7 +203,8 @@ export default function HomePage() {
       const updatedEvent = await eventService.getEventById(eventId);
       setSelectedEvent(updatedEvent);
       
-      setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, participants: updatedEvent.participants.length } : e));
+      // Оновлюємо список подій з сервера, щоб врахувати зміни в учасниках для фільтрів
+      fetchEvents();
     } catch (err) {
       console.error('Error leaving event:', err);
       setFormError(err.response?.data?.error || err.message);
@@ -271,47 +297,8 @@ export default function HomePage() {
     }
   }
 
-  const filteredEvents = useMemo(() => {
-    return events.filter((event) => {
-      // 1. Пошук (назва, опис, локація)
-      const query = search.trim().toLowerCase()
-      const matchesSearch = !query || 
-        event.title?.toLowerCase().includes(query) ||
-        event.description?.toLowerCase().includes(query) ||
-        event.location?.toLowerCase().includes(query)
-
-      // 2. Категорія
-      const matchesCategory = !filterCategory || event.category === filterCategory
-
-      // 3. Створені мною
-      const userId = currentUser?.id
-      const matchesMyEvents = !filterMyEvents || (userId && Number(event.creator_id) === Number(userId))
-
-      // 4. Я учасник
-      const matchesJoined = !filterJoined || (userId && event.participant_ids?.some(pId => Number(pId) === Number(userId)))
-
-      // 5. Мінімальна кількість людей (поточних учасників)
-      const minParts = parseInt(filterMinParticipants, 10)
-      const matchesMinParticipants = !filterMinParticipants || isNaN(minParts) || 
-        (event.participants >= minParts)
-
-      // 6. Максимальна кількість людей (ліміт учасників)
-      const maxParts = parseInt(filterMaxParticipants, 10)
-      const matchesMaxParticipants = !filterMaxParticipants || isNaN(maxParts) || 
-        (event.max_participants && event.max_participants <= maxParts)
-
-      // 7. Дата (захід після вибраної дати)
-      let matchesDate = true
-      if (filterDate && event.event_date_raw) {
-        // Ми порівнюємо лише дати без часу
-        const eventDay = new Date(event.event_date_raw).setHours(0,0,0,0)
-        const filterDay = new Date(filterDate).setHours(0,0,0,0)
-        matchesDate = eventDay >= filterDay
-      }
-
-      return matchesSearch && matchesCategory && matchesMyEvents && matchesJoined && matchesMinParticipants && matchesMaxParticipants && matchesDate
-    })
-  }, [search, events, filterCategory, filterMyEvents, filterJoined, filterMinParticipants, filterMaxParticipants, filterDate, currentUser])
+  // Тепер ми просто використовуємо події з бекенду, оскільки вони вже відфільтровані
+  const filteredEvents = events;
 
   if (userLoading) {
     return (

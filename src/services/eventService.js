@@ -1,8 +1,14 @@
 import API from '../utils/api';
 
 export const eventService = {
-  getEvents: async () => {
-    const response = await API.get('/events');
+  getEvents: async (filters = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.append(key, value);
+      }
+    });
+    const response = await API.get(`/events?${params.toString()}`);
     return response.data;
   },
 
