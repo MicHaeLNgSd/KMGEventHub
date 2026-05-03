@@ -35,13 +35,13 @@ export default function EventFormPanel({
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    // Reset tab when opening a different event
+    // Reset state on event change
     setActiveTab('details');
     setShowParticipants(false);
     setLocalParticipants(selectedEvent?.participants || []);
   }, [selectedEvent?.id]);
 
-  // Always listen for participant changes on any tab
+    // Listen for participant changes
   useEffect(() => {
     if (!selectedEvent?.id) return;
     
@@ -73,7 +73,6 @@ export default function EventFormPanel({
 
   useEffect(() => {
     if (activeTab === 'chat' && selectedEvent?.id) {
-      // Connect and join event room
       socketService.connect();
       socketService.joinEvent(selectedEvent.id);
 

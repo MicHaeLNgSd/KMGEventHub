@@ -36,7 +36,7 @@ function App() {
     }
   }, [])
 
-  // Connect socket when user is available, handle ban
+  // Socket connection and ban handling
   useEffect(() => {
     if (user) {
       socketService.connect();

@@ -6,7 +6,7 @@
   z-index: 1100;
   display: flex;
   transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  pointer-events: none; /* Let clicks pass through to page when closed */
+  pointer-events: none; /* Allows clicks to pass through when closed */
   box-shadow: 10px 0 30px rgba(0,0,0,0.1);
   background: var(--surface);
 }
@@ -28,7 +28,7 @@
   color: var(--muted);
   padding: 8px;
   border-radius: 50%;
-  display: none; /* Hidden on desktop */
+  display: none;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
@@ -47,7 +47,7 @@
 }
 
 .chat-panel-container.closed {
-  transform: translateX(-380px); /* Adjust based on panel width */
+  transform: translateX(-380px);
 }
 
 .chat-panel-container.open {
@@ -659,7 +659,7 @@
   }
   
   .chat-close-x-btn {
-    display: flex; /* Visible on mobile */
+    display: flex;
   }
   
   .chat-panel-container.closed {
@@ -680,7 +680,7 @@
     display: flex; /* Ensure it's visible */
   }
   
-  /* Hide the trigger when panel is open on mobile to avoid overlap with content */
+  /* Hide trigger when open on mobile to avoid overlap */
   .chat-panel-container.open .chat-panel-trigger {
     display: none;
   }

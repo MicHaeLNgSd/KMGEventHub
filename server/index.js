@@ -30,7 +30,7 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-// Setup Socket.io
+// Socket.io initialization
 const io = new Server(httpServer, {
   cors: {
     origin: '*', // Allow all origins for development
@@ -43,7 +43,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadDir));
 
-// Multer storage configuration
+// Multer config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
@@ -68,7 +68,7 @@ const upload = multer({
   }
 });
 
-// Socket.io Authentication Middleware
+// Socket.io Auth
 io.use((socket, next) => {
   const token = socket.handshake.auth.token;
   if (!token) {
@@ -83,7 +83,7 @@ io.use((socket, next) => {
   }
 });
 
-// Socket.io Connection & Events
+// Socket Events
 io.on('connection', (socket) => {
   console.log(`User connected to socket: ${socket.user.id}`);
 
@@ -98,7 +98,7 @@ io.on('connection', (socket) => {
   });
   
   socket.on('joinPersonalRoom', (userId) => {
-    // Only allow joining own room for security
+    // Only own room
     if (socket.user.id === parseInt(userId, 10)) {
       socket.join(`user_${userId}`);
       console.log(`User ${socket.user.id} joined personal room user_${userId}`);
@@ -187,8 +187,7 @@ io.on('connection', (socket) => {
       const maxId = Math.max(senderId, parseInt(receiverId, 10));
       io.to(`direct_${minId}_${maxId}`).emit('newDirectMessage', newMessage);
       
-      // Also emit an event to notify the receiver for the overall chat list update (global notification)
-      // They might not be in the direct room, so we emit to their personal room if they joined one
+      // Notify receiver for chat list update
       io.to(`user_${receiverId}`).emit('chatListUpdate', newMessage);
       io.to(`user_${senderId}`).emit('chatListUpdate', newMessage);
     } catch (err) {
@@ -270,8 +269,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
       ORDER BY u.created_at DESC
     `, [userId]);
     
-    // We'll process the results to make it easier for the frontend
-    // Specifically, if status is 'blocked', we want to know if WE blocked them
+    // Process block status
     const users = result.rows.map(row => {
       if (row.friendship_status === 'blocked') {
         row.is_blocked_by_me = (row.requester_id === userId);
@@ -296,7 +294,7 @@ app.put('/api/users/status', authenticateToken, async (req, res) => {
   }
 });
 
-// Offline beacon endpoint (no auth middleware because it uses sendBeacon)
+// Offline beacon
 app.post('/api/users/offline', async (req, res) => {
   try {
     let token = req.query.token;
@@ -373,7 +371,7 @@ app.post('/api/friends/request', authenticateToken, async (req, res) => {
       [userId, friendId]
     );
 
-    // Notify the target user in real-time
+    // Notify target real-time
     const senderInfo = await pool.query('SELECT full_name FROM users WHERE id = $1', [userId]);
     io.to(`user_${friendId}`).emit('friendRequestReceived', { fromUserId: userId, fromName: senderInfo.rows[0]?.full_name });
 
@@ -408,7 +406,7 @@ app.put('/api/friends/accept', authenticateToken, async (req, res) => {
   }
 });
 
-// Remove friend or decline/cancel request
+// Friend removal
 app.delete('/api/friends/remove', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -436,7 +434,7 @@ app.post('/api/friends/block', authenticateToken, async (req, res) => {
     
     console.log(`User ${userId} blocking user ${friendId}`);
 
-    // Delete any existing relation first to avoid conflict and ensure correct requester_id
+    // Reset relation to avoid conflicts
     await pool.query(
       'DELETE FROM user_friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
       [userId, friendId]
@@ -448,7 +446,7 @@ app.post('/api/friends/block', authenticateToken, async (req, res) => {
       VALUES ($1, $2, 'blocked')
     `, [userId, friendId]);
 
-    // Delete chat history (messages)
+    // Clear chat history
     await pool.query(
       'DELETE FROM messages WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1)',
       [userId, friendId]
@@ -1018,7 +1016,7 @@ app.put('/api/events/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
-    // Notify participants about event update
+    // Notify participants
     io.to(`event_${id}`).emit('eventUpdated', { eventId: parseInt(id), event: result.rows[0] });
 
     res.json({ message: 'Event updated successfully', event: result.rows[0] });
@@ -1033,7 +1031,7 @@ app.delete('/api/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Notify participants before deletion
+    // Notify participants
     io.to(`event_${id}`).emit('eventDeleted', { eventId: parseInt(id) });
 
     const result = await pool.query(
@@ -1058,7 +1056,7 @@ app.post('/api/events/:id/join', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    // Check if user is already a participant
+    // Check if already participant
     const existing = await pool.query('SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2', [id, userId]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Ви вже є учасником цього заходу' });
@@ -1170,7 +1168,7 @@ app.get('/api/chats/personal', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // Fetch latest message per conversational partner
+    // Latest message per partner
     const result = await pool.query(`
       WITH RankedMessages AS (
         SELECT 

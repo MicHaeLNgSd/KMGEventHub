@@ -1112,10 +1112,9 @@
   background: rgba(0,0,0,0.05);
 }
 
-/* ========== Z-INDEX HIERARCHY ========== */
-/* header: 1002, chat-panel: 1001, event-panel: 1000, scroll-to-top: 999 */
+/* Z-INDEX: header: 1002, chat: 1100, event-panel: 1000, scroll: 999 */
 
-/* ========== RESPONSIVE: TABLET (<=900px) ========== */
+/* TABLET (<=900px) */
 @media (max-width: 900px) {
   .app-shell {
     padding: 16px 12px 24px;
@@ -1205,7 +1204,7 @@
   }
 }
 
-/* ========== RESPONSIVE: MOBILE (<=600px) ========== */
+/* MOBILE (<=600px) */
 @media (max-width: 600px) {
   /* Burger menu visible */
   .burger-btn {
@@ -1328,7 +1327,7 @@
   }
 }
 
-/* ========== RESPONSIVE: EXTRA SMALL (<=350px) ========== */
+/* EXTRA SMALL (<=350px) */
 @media (max-width: 350px) {
   .brand-title {
     font-size: 1.1rem;

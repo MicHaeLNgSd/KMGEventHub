@@ -43,7 +43,6 @@ export default function HomePage({ currentUser, setUser }) {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState(null)
 
-  // Removed redundant fetchUser useEffect as currentUser is passed from App.jsx
 
   const isModerator = currentUser?.role === 'MODERATOR';
   const isOwner = selectedEvent?.creator_id === currentUser?.id;
@@ -89,7 +88,7 @@ export default function HomePage({ currentUser, setUser }) {
       setTotalEvents(data.totalCount || 0)
       setError(null)
     } catch (err) {
-      console.error('Помилка при завантаженні подій:', err)
+      console.error('Error loading events:', err)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -175,7 +174,7 @@ export default function HomePage({ currentUser, setUser }) {
       setSelectedEvent(null)
       setShowDeleteConfirm(false)
     } catch (err) {
-      console.error('Помилка при видаленні заходу:', err)
+      console.error('Error deleting event:', err)
       setFormError(err.message)
     } finally {
       setSubmitting(false)
@@ -268,7 +267,7 @@ export default function HomePage({ currentUser, setUser }) {
         photo_url: null,
       })
     } catch (err) {
-      console.error(`Помилка при ${selectedEvent ? 'редагуванні' : 'створенні'} заходу:`, err)
+      console.error(`Error ${selectedEvent ? 'updating' : 'creating'} event:`, err)
       setFormError(err.response?.data?.error || err.message)
     } finally {
       setSubmitting(false)
