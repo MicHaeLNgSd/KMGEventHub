@@ -1114,7 +1114,6 @@
 
 /* Z-INDEX: header: 1002, chat: 1100, event-panel: 1000, scroll: 999 */
 
-/* TABLET (<=900px) */
 @media (max-width: 900px) {
   .app-shell {
     padding: 16px 12px 24px;
@@ -1204,7 +1203,6 @@
   }
 }
 
-/* MOBILE (<=600px) */
 @media (max-width: 600px) {
   /* Burger menu visible */
   .burger-btn {
@@ -1327,7 +1325,6 @@
   }
 }
 
-/* EXTRA SMALL (<=350px) */
 @media (max-width: 350px) {
   .brand-title {
     font-size: 1.1rem;

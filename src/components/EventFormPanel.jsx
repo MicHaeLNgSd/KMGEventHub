@@ -5,7 +5,49 @@ import API from '../utils/api';
 import { eventService } from '../services/eventService';
 import { socketService } from '../services/socketService';
 import { EVENT_CATEGORIES } from '../utils/categories';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
 import './EventFormPanel.css';
+
+// Fix for Leaflet default icon issues in React
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+});
+
+function LocationMarker({ position, setPosition, onAddressFound, disabled }) {
+  const timeoutRef = useRef(null);
+
+  const map = useMapEvents({
+    click(e) {
+      if (disabled) return;
+      const { lat, lng } = e.latlng;
+      setPosition(lat, lng);
+      
+      // Clear existing timeout to debounce
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+      timeoutRef.current = setTimeout(() => {
+        // Reverse Geocoding via Nominatim
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`, {
+          headers: { 'Accept-Language': 'uk,en' }
+        })
+          .then(res => res.ok ? res.json() : Promise.reject())
+          .then(data => {
+            if (data && data.display_name) onAddressFound(data.display_name);
+          })
+          .catch(err => {
+            console.error('Geocoding error:', err);
+            onAddressFound(null);
+          });
+      }, 500); // 500ms delay
+    },
+  });
+
+  return position ? <Marker position={position} /> : null;
+}
 
 export default function EventFormPanel({
   selectedEvent,
@@ -26,6 +68,8 @@ export default function EventFormPanel({
   handleLeaveEvent
 }) {
   const [activeTab, setActiveTab] = useState('details');
+  const [suggestedAddress, setSuggestedAddress] = useState(null);
+  const [addressLoading, setAddressLoading] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [showParticipants, setShowParticipants] = useState(false);
@@ -39,6 +83,7 @@ export default function EventFormPanel({
     setActiveTab('details');
     setShowParticipants(false);
     setLocalParticipants(selectedEvent?.participants || []);
+    setSuggestedAddress(null);
   }, [selectedEvent?.id]);
 
     // Listen for participant changes
@@ -274,16 +319,28 @@ export default function EventFormPanel({
               </div>
             </div>
 
-            {isEditMode && (
-              <div className="form-group">
-                <label>Організатор</label>
-                <div className="organizer-display" style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', fontSize: '0.9rem' }}>
-                  {selectedEvent?.creator_id === currentUser?.id 
-                    ? `Ви` 
-                    : `${selectedEvent?.creator_name || 'Невідомо'} (@${selectedEvent?.creator_nickname || '?'})`}
+            <div className="form-row organizer-privacy-row">
+              {isEditMode && (
+                <div className="form-group organizer-group">
+                  <label>Організатор</label>
+                  <div className="organizer-display">
+                    {selectedEvent?.creator_id === currentUser?.id 
+                      ? `Ви` 
+                      : `${selectedEvent?.creator_name || 'Невідомо'} (@${selectedEvent?.creator_nickname || '?'})`}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {(!isEditMode || hasEventAccess) && (
+                <div className="form-group privacy-group">
+                  <label htmlFor="is_private">Приватний</label>
+                  <label className="toggle-switch">
+                    <input type="checkbox" id="is_private" name="is_private" checked={formData.is_private} onChange={handleFormChange} className="form-input" />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+              )}
+            </div>
 
             <div className="form-group">
               <label htmlFor="title">Назва заходу *</label>
@@ -292,7 +349,21 @@ export default function EventFormPanel({
             
             <div className="form-group">
               <label htmlFor="location">Місце проведення *</label>
-              <input type="text" id="location" name="location" value={formData.location} onChange={handleFormChange} placeholder="Адреса або назва закладу" required disabled={!hasEventAccess && isEditMode} className="form-input" />
+              <div className="location-input-wrapper">
+                <input type="text" id="location" name="location" value={formData.location} onChange={handleFormChange} placeholder="Адреса або назва закладу" required disabled={!hasEventAccess && isEditMode} className="form-input" />
+                  <button 
+                    type="button" 
+                    className="apply-suggestion-btn" 
+                    disabled={!suggestedAddress || suggestedAddress === formData.location || addressLoading}
+                    onClick={() => {
+                      handleFormChange({ target: { name: 'location', value: suggestedAddress } });
+                      setSuggestedAddress(null);
+                    }}
+                    title={suggestedAddress ? `Використати адресу з мапи: ${suggestedAddress}` : 'Клацніть на мапу, щоб отримати адресу'}
+                  >
+                    {addressLoading ? 'Пошук...' : 'Взяти з мапи'}
+                  </button>
+              </div>
             </div>
 
             <div className="form-group">
@@ -312,14 +383,43 @@ export default function EventFormPanel({
               </select>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="latitude">Широта</label>
-                <input type="number" id="latitude" name="latitude" value={formData.latitude} onChange={handleFormChange} placeholder="50.4501" step="0.0001" disabled={!hasEventAccess && isEditMode} className="form-input" />
+            <div className="form-group">
+              <label>Виберіть локацію на мапі</label>
+              <div className="event-map-container">
+                <MapContainer 
+                  center={[formData.latitude || 50.4501, formData.longitude || 30.5234]} 
+                  zoom={13} 
+                  scrollWheelZoom={true}
+                  className="event-map"
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <LocationMarker 
+                    position={formData.latitude && formData.longitude ? [formData.latitude, formData.longitude] : null}
+                    setPosition={(lat, lng) => {
+                      setAddressLoading(true);
+                      handleFormChange({ target: { name: 'latitude', value: lat } });
+                      handleFormChange({ target: { name: 'longitude', value: lng } });
+                    }}
+                    onAddressFound={(address) => {
+                      setAddressLoading(false);
+                      if (!address) return;
+                      if (!formData.location || formData.location === '') {
+                        handleFormChange({ target: { name: 'location', value: address } });
+                        setSuggestedAddress(null);
+                      } else {
+                        setSuggestedAddress(address);
+                      }
+                    }}
+                    disabled={!hasEventAccess && isEditMode}
+                  />
+                </MapContainer>
               </div>
-              <div className="form-group">
-                <label htmlFor="longitude">Довгота</label>
-                <input type="number" id="longitude" name="longitude" value={formData.longitude} onChange={handleFormChange} placeholder="30.5234" step="0.0001" disabled={!hasEventAccess && isEditMode} className="form-input" />
+              <div className="form-row coords-display">
+                <div className="coord-item">Широта: <span>{typeof formData.latitude === 'number' ? formData.latitude.toFixed(4) : (Number(formData.latitude) ? Number(formData.latitude).toFixed(4) : '—')}</span></div>
+                <div className="coord-item">Довгота: <span>{typeof formData.longitude === 'number' ? formData.longitude.toFixed(4) : (Number(formData.longitude) ? Number(formData.longitude).toFixed(4) : '—')}</span></div>
               </div>
             </div>
 
@@ -333,15 +433,6 @@ export default function EventFormPanel({
               <input type="number" id="max_participants" name="max_participants" value={formData.max_participants} onChange={handleFormChange} placeholder="16" min="1" disabled={!hasEventAccess && isEditMode} className="form-input" />
             </div>
 
-            {(!isEditMode || hasEventAccess) && (
-              <div className="form-group event-private-toggle">
-                <label htmlFor="is_private" style={{ margin: 0 }}>Приватний захід</label>
-                <label className="toggle-switch">
-                  <input type="checkbox" id="is_private" name="is_private" checked={formData.is_private} onChange={handleFormChange} className="form-input" />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-            )}
 
             <div className="form-actions event-form-actions">
               <button type="button" className="button button-secondary" onClick={onClose}>
