@@ -121,6 +121,54 @@ class SocketService {
       this.socket.off('messageError', callback);
     }
   }
+
+  // Friend request received
+  onFriendRequestReceived(callback) { if (this.socket) this.socket.on('friendRequestReceived', callback); }
+  offFriendRequestReceived(callback) { if (this.socket) this.socket.off('friendRequestReceived', callback); }
+
+  // Friend request accepted
+  onFriendRequestAccepted(callback) { if (this.socket) this.socket.on('friendRequestAccepted', callback); }
+  offFriendRequestAccepted(callback) { if (this.socket) this.socket.off('friendRequestAccepted', callback); }
+
+  // Friend removed
+  onFriendRemoved(callback) { if (this.socket) this.socket.on('friendRemoved', callback); }
+  offFriendRemoved(callback) { if (this.socket) this.socket.off('friendRemoved', callback); }
+
+  // User blocked
+  onUserBlocked(callback) { if (this.socket) this.socket.on('userBlocked', callback); }
+  offUserBlocked(callback) { if (this.socket) this.socket.off('userBlocked', callback); }
+
+  // User unblocked
+  onUserUnblocked(callback) { if (this.socket) this.socket.on('userUnblocked', callback); }
+  offUserUnblocked(callback) { if (this.socket) this.socket.off('userUnblocked', callback); }
+
+  // Account banned (admin action)
+  onAccountBanned(callback) { if (this.socket) this.socket.on('accountBanned', callback); }
+  offAccountBanned(callback) { if (this.socket) this.socket.off('accountBanned', callback); }
+
+  // Event deleted
+  onEventDeleted(callback) { if (this.socket) this.socket.on('eventDeleted', callback); }
+  offEventDeleted(callback) { if (this.socket) this.socket.off('eventDeleted', callback); }
+
+  // Event updated
+  onEventUpdated(callback) { if (this.socket) this.socket.on('eventUpdated', callback); }
+  offEventUpdated(callback) { if (this.socket) this.socket.off('eventUpdated', callback); }
+
+  // Kicked from event
+  onKickedFromEvent(callback) { if (this.socket) this.socket.on('kickedFromEvent', callback); }
+  offKickedFromEvent(callback) { if (this.socket) this.socket.off('kickedFromEvent', callback); }
+
+  // Message deleted
+  onMessageDeleted(callback) { if (this.socket) this.socket.on('messageDeleted', callback); }
+  offMessageDeleted(callback) { if (this.socket) this.socket.off('messageDeleted', callback); }
+
+  // Participant joined event
+  onParticipantJoined(callback) { if (this.socket) this.socket.on('participantJoined', callback); }
+  offParticipantJoined(callback) { if (this.socket) this.socket.off('participantJoined', callback); }
+
+  // Participant left event
+  onParticipantLeft(callback) { if (this.socket) this.socket.on('participantLeft', callback); }
+  offParticipantLeft(callback) { if (this.socket) this.socket.off('participantLeft', callback); }
 }
 
 export const socketService = new SocketService();

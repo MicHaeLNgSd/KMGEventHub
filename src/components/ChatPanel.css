@@ -555,6 +555,46 @@
   gap: 8px;
 }
 
+.chat-participants-dropdown {
+  background: var(--surface-strong, #f8f9fa);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  padding: 8px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.chat-participants-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chat-participant-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.chat-participant-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-participant-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-panel-container .delete-confirm-modal {
   pointer-events: auto;
   z-index: 3000;

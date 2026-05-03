@@ -31,12 +31,44 @@ export default function EventFormPanel({
   const [showParticipants, setShowParticipants] = useState(false);
   const [showKickConfirm, setShowKickConfirm] = useState({ show: false, userId: null, userName: '' });
   const [showMessageDeleteConfirm, setShowMessageDeleteConfirm] = useState({ show: false, messageId: null });
+  const [localParticipants, setLocalParticipants] = useState([]);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     // Reset tab when opening a different event
     setActiveTab('details');
     setShowParticipants(false);
+    setLocalParticipants(selectedEvent?.participants || []);
+  }, [selectedEvent?.id]);
+
+  // Always listen for participant changes on any tab
+  useEffect(() => {
+    if (!selectedEvent?.id) return;
+    
+    socketService.connect();
+    socketService.joinEvent(selectedEvent.id);
+
+    const handleJoined = (data) => {
+      if (data.eventId === selectedEvent.id && data.user) {
+        setLocalParticipants(prev => {
+          if (prev.some(p => p.id === data.user.id)) return prev;
+          return [...prev, data.user];
+        });
+      }
+    };
+    const handleLeft = (data) => {
+      if (data.eventId === selectedEvent.id) {
+        setLocalParticipants(prev => prev.filter(p => p.id !== data.userId));
+      }
+    };
+
+    socketService.onParticipantJoined(handleJoined);
+    socketService.onParticipantLeft(handleLeft);
+
+    return () => {
+      socketService.offParticipantJoined(handleJoined);
+      socketService.offParticipantLeft(handleLeft);
+    };
   }, [selectedEvent?.id]);
 
   useEffect(() => {
@@ -51,6 +83,29 @@ export default function EventFormPanel({
 
       socketService.onNewMessage(handleNewMessage);
 
+      // Listen for message deletions
+      const handleMessageDeleted = (data) => {
+        setMessages(prev => prev.filter(m => m.id !== data.messageId));
+      };
+      socketService.onMessageDeleted(handleMessageDeleted);
+
+      // Listen for participant join/leave
+      const handleParticipantJoined = (data) => {
+        if (data.eventId === selectedEvent.id && data.user) {
+          setLocalParticipants(prev => {
+            if (prev.some(p => p.id === data.user.id)) return prev;
+            return [...prev, data.user];
+          });
+        }
+      };
+      const handleParticipantLeft = (data) => {
+        if (data.eventId === selectedEvent.id) {
+          setLocalParticipants(prev => prev.filter(p => p.id !== data.userId));
+        }
+      };
+      socketService.onParticipantJoined(handleParticipantJoined);
+      socketService.onParticipantLeft(handleParticipantLeft);
+
       // Load history
       eventService.getEventMessages(selectedEvent.id)
         .then(setMessages)
@@ -59,6 +114,9 @@ export default function EventFormPanel({
       return () => {
         socketService.leaveEvent(selectedEvent.id);
         socketService.offNewMessage(handleNewMessage);
+        socketService.offMessageDeleted(handleMessageDeleted);
+        socketService.offParticipantJoined(handleParticipantJoined);
+        socketService.offParticipantLeft(handleParticipantLeft);
       };
     }
   }, [activeTab, selectedEvent?.id]);
@@ -77,7 +135,7 @@ export default function EventFormPanel({
     setNewMessage('');
   };
 
-  const participants = selectedEvent?.participants || [];
+  const participants = localParticipants;
   const isJoined = participants.some(p => p.id === currentUser?.id);
   const canJoin = isEditMode && !hasEventAccess && !isJoined && currentUser;
 
@@ -117,7 +175,8 @@ export default function EventFormPanel({
     try {
       await API.delete(`/events/${selectedEvent.id}/participants/${showKickConfirm.userId}`);
       setShowKickConfirm({ show: false, userId: null, userName: '' });
-      // In a real app we might emit a socket event or refetch
+      // Immediately update local participant list
+      setLocalParticipants(prev => prev.filter(p => p.id !== showKickConfirm.userId));
     } catch (err) {
       console.error('Error kicking participant:', err);
     }
@@ -319,10 +378,7 @@ export default function EventFormPanel({
 
         {activeTab === 'chat' && (
           <div className="chat-container">
-            <div 
-              className="chat-header-bar" 
-              onClick={() => setShowParticipants(!showParticipants)}
-            >
+            <div className="chat-header-bar">
               <div className="chat-header-info">
                 <div className="chat-header-avatar">
                   {selectedEvent.photo_url ? (
@@ -331,52 +387,54 @@ export default function EventFormPanel({
                     <FaCalendarAlt size={16} />
                   )}
                 </div>
-                <span><FaUsers className="icon-mr" /> Учасників: {participants.length} / {selectedEvent.max_participants || '∞'}</span>
+                <span className="chat-header-name">{selectedEvent.title}</span>
               </div>
-              <span className="chat-header-subtitle">
-                {showParticipants ? '▲ Сховати перелік' : '▼ Показати перелік'}
-              </span>
+              <button 
+                className="chat-participants-toggle-btn"
+                onClick={() => setShowParticipants(!showParticipants)}
+                title="Учасники"
+              >
+                <FaUsers size={14} />
+                <span>{participants.length}</span>
+              </button>
             </div>
 
             {showParticipants && (
-              <div className="chat-participants-modal">
-                <ul className="participants-list-ul">
-                  {sortedParticipants.map(p => (
-                    <li key={p.id} className="participant-item">
-                      <div className="participant-avatar">
-                        {p.photo_url ? (
-                          <img src={p.photo_url} alt={p.full_name} className="participant-photo" />
-                        ) : (
-                          p.full_name.charAt(0).toUpperCase()
-                        )}
-                      </div>
-                      <div className="participant-info">
-                        <div className="participant-name">{p.full_name}</div>
-                        <div className="participant-nickname">@{p.nickname}</div>
-                      </div>
-                      <div className="participant-actions">
-                        {p.id === selectedEvent.creator_id && (
-                          <span className="participant-author-badge">Автор</span>
-                        )}
-                        {p.id !== selectedEvent.creator_id && (currentUser?.id === selectedEvent?.creator_id || isModerator) && (
-                          <button 
-                            className="kick-participant-btn-small" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowKickConfirm({ show: true, userId: p.id, userName: p.full_name });
-                            }}
-                            title="Видалити з івенту"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                  {sortedParticipants.length === 0 && (
-                    <p className="participants-empty">Поки що немає учасників</p>
-                  )}
-                </ul>
+              <div className="chat-participants-dropdown">
+                <div className="chat-participants-title">Учасники ({participants.length} / {selectedEvent.max_participants || '∞'})</div>
+                {sortedParticipants.map(p => (
+                  <div key={p.id} className="chat-participant-item">
+                    <div className="chat-participant-avatar" style={{ background: p.photo_url ? 'transparent' : '#10b981' }}>
+                      {p.photo_url ? (
+                        <img src={p.photo_url} alt={p.full_name} />
+                      ) : (
+                        p.full_name.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div className="chat-participant-info">
+                      <span className="chat-participant-name">{p.full_name}</span>
+                      <span className="chat-participant-nick">@{p.nickname}</span>
+                      {p.id === selectedEvent.creator_id && (
+                        <span className="participant-author-badge">Автор</span>
+                      )}
+                    </div>
+                    {p.id !== selectedEvent.creator_id && (currentUser?.id === selectedEvent?.creator_id || isModerator) && (
+                      <button 
+                        className="kick-participant-btn-small" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowKickConfirm({ show: true, userId: p.id, userName: p.full_name });
+                        }}
+                        title="Видалити з івенту"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {sortedParticipants.length === 0 && (
+                  <p className="participants-empty">Поки що немає учасників</p>
+                )}
               </div>
             )}
 

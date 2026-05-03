@@ -16,6 +16,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+  transition: all 0.3s ease;
+}
+
+.site-header.admin-header {
+  border-bottom: 2px solid #e11d48;
+  background: linear-gradient(to right, var(--surface), #fff1f2);
 }
 
 .brand-link {

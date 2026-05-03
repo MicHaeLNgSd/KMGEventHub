@@ -79,21 +79,21 @@
 }
 
 .chat-header-bar {
-  padding: 12px 15px;
+  padding: 10px 15px;
   background-color: var(--surface-strong);
-  cursor: pointer;
   border-bottom: 1px solid var(--border);
-  user-select: none;
   display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .chat-header-info {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-weight: 600;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
 }
 
 .chat-header-avatar {
@@ -115,11 +115,97 @@
   object-fit: cover;
 }
 
-.chat-header-subtitle {
+.chat-header-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-participants-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0,0,0,0.05);
+  border: none;
+  border-radius: 20px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.chat-participants-toggle-btn:hover {
+  background: rgba(0,0,0,0.1);
+}
+
+.chat-participants-dropdown {
+  background: var(--surface-strong, #f8f9fa);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  padding: 8px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.chat-participants-title {
   font-size: 0.75rem;
-  color: var(--muted);
-  font-weight: normal;
-  margin-top: 4px;
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chat-participant-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.chat-participant-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 600;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.chat-participant-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chat-participant-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-participant-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-participant-nick {
+  font-size: 0.72rem;
+  color: var(--muted, #6b7280);
 }
 
 /* Event Photo Setup */

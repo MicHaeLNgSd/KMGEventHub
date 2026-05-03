@@ -4,7 +4,7 @@ import {
   FaComments, FaUsers, FaCalendarAlt, FaSearch, 
   FaChevronRight, FaChevronLeft, FaPaperPlane,
   FaUserCircle, FaInbox, FaUserPlus, FaUserMinus, 
-  FaBan, FaCheck, FaTimes, FaEllipsisV, FaUserFriends
+  FaBan, FaCheck, FaTimes, FaEllipsisV, FaUserFriends, FaUserShield
 } from 'react-icons/fa';
 import { FiMessageSquare } from 'react-icons/fi';
 import { chatService } from '../services/chatService';
@@ -25,6 +25,8 @@ const ChatPanel = ({ currentUser }) => {
   const [peopleFilter, setPeopleFilter] = useState('all'); // all, friends, banned
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [chatParticipants, setChatParticipants] = useState([]);
+  const [showChatParticipants, setShowChatParticipants] = useState(false);
   
   const [confirmModal, setConfirmModal] = useState({
     show: false,
@@ -51,9 +53,42 @@ const ChatPanel = ({ currentUser }) => {
       
       const refreshList = () => loadTabData();
       socketService.onChatListUpdate(refreshList);
+
+      // Friendship events - refresh people/requests tabs
+      socketService.onFriendRequestReceived(refreshList);
+      socketService.onFriendRequestAccepted(refreshList);
+      socketService.onFriendRemoved(refreshList);
+      socketService.onUserBlocked(refreshList);
+      socketService.onUserUnblocked(refreshList);
+
+      // Kicked from event - refresh event list
+      socketService.onKickedFromEvent(refreshList);
+
+      // Event deleted - refresh events and close active chat if needed
+      const handleEventDeleted = (data) => {
+        if (activeChat?.type === 'event' && activeChat?.id === data.eventId) {
+          setActiveChat(null);
+        }
+        loadTabData();
+      };
+      socketService.onEventDeleted(handleEventDeleted);
+
+      // Message deleted in active chat
+      const handleMessageDeleted = (data) => {
+        setMessages(prev => prev.filter(m => m.id !== data.messageId));
+      };
+      socketService.onMessageDeleted(handleMessageDeleted);
       
       return () => {
         socketService.offChatListUpdate(refreshList);
+        socketService.offFriendRequestReceived(refreshList);
+        socketService.offFriendRequestAccepted(refreshList);
+        socketService.offFriendRemoved(refreshList);
+        socketService.offUserBlocked(refreshList);
+        socketService.offUserUnblocked(refreshList);
+        socketService.offKickedFromEvent(refreshList);
+        socketService.offEventDeleted(handleEventDeleted);
+        socketService.offMessageDeleted(handleMessageDeleted);
       };
     }
   }, [isOpen, activeTab, currentUser]);
@@ -91,6 +126,7 @@ const ChatPanel = ({ currentUser }) => {
   useEffect(() => {
     if (activeChat) {
       loadMessages();
+      setShowChatParticipants(false);
       
       if (activeChat.type === 'direct') {
         socketService.joinDirectChat(activeChat.id);
@@ -98,7 +134,26 @@ const ChatPanel = ({ currentUser }) => {
       } else {
         socketService.joinEvent(activeChat.id);
         socketService.onNewMessage(handleNewMessage);
+        // Load participants for event chat
+        eventService.getEventById(activeChat.id)
+          .then(ev => setChatParticipants(ev.participants || []))
+          .catch(err => console.error('Error loading participants:', err));
       }
+
+      // Listen for participant changes
+      const handleParticipantJoined = (data) => {
+        if (data.user) {
+          setChatParticipants(prev => {
+            if (prev.some(p => p.id === data.user.id)) return prev;
+            return [...prev, data.user];
+          });
+        }
+      };
+      const handleParticipantLeft = (data) => {
+        setChatParticipants(prev => prev.filter(p => p.id !== data.userId));
+      };
+      socketService.onParticipantJoined(handleParticipantJoined);
+      socketService.onParticipantLeft(handleParticipantLeft);
 
       return () => {
         if (activeChat.type === 'direct') {
@@ -108,6 +163,8 @@ const ChatPanel = ({ currentUser }) => {
           socketService.leaveEvent(activeChat.id);
           socketService.offNewMessage(handleNewMessage);
         }
+        socketService.offParticipantJoined(handleParticipantJoined);
+        socketService.offParticipantLeft(handleParticipantLeft);
       };
     }
   }, [activeChat]);
@@ -158,6 +215,8 @@ const ChatPanel = ({ currentUser }) => {
         await chatService.unbanUser(targetId);
       } else if (action === 'kick') {
         await chatService.kickParticipant(activeChat.id, targetId);
+        // Immediately update participant list
+        setChatParticipants(prev => prev.filter(p => p.id !== targetId));
       } else if (action === 'deleteMessage') {
         await API.delete(`/messages/${targetId}`);
         setMessages(prev => prev.filter(m => m.id !== targetId));
@@ -432,44 +491,54 @@ const ChatPanel = ({ currentUser }) => {
                     <div className="chat-item-last-msg">@{person.nickname}</div>
                   </div>
                   <div className="person-actions">
-                    {person.friendship_status === 'blocked' ? (
-                      <button className="action-btn unban-btn" onClick={() => handleFriendAction('unblock', person.id)} title="Розблокувати">
-                        <FaBan />
-                      </button>
-                    ) : (
-                      <>
-                        {person.friendship_status === 'accepted' ? (
-                          <button className="action-btn remove-btn" onClick={() => handleFriendAction('remove', person.id, person.full_name)} title="Видалити з друзів">
-                            <FaUserMinus />
-                          </button>
-                        ) : (
-                          person.friendship_status === 'pending' ? (
-                            person.requester_id === currentUser.id ? (
-                              <button className="action-btn cancel-btn" onClick={() => handleFriendAction('remove', person.id)} title="Скасувати запит">
-                                <FaTimes />
-                              </button>
-                            ) : null // Should be handled in requests tab, but let's keep it simple
-                          ) : (
-                            <button className="action-btn add-btn" onClick={() => handleFriendAction('request', person.id)} title="Додати в друзі">
-                              <FaUserPlus />
+                    {/* Hide friend actions for admins as requested */}
+                    {currentUser.role !== 'MODERATOR' && (
+                      person.friendship_status === 'blocked' ? (
+                        <button className="action-btn unban-btn" onClick={() => handleFriendAction('unblock', person.id)} title="Розблокувати">
+                          <FaBan />
+                        </button>
+                      ) : (
+                        <>
+                          {person.friendship_status === 'accepted' ? (
+                            <button className="action-btn remove-btn" onClick={() => handleFriendAction('remove', person.id, person.full_name)} title="Видалити з друзів">
+                              <FaUserMinus />
                             </button>
-                          )
-                        )}
+                          ) : (
+                            person.friendship_status === 'pending' ? (
+                              person.requester_id === currentUser.id ? (
+                                <button className="action-btn cancel-btn" onClick={() => handleFriendAction('remove', person.id)} title="Скасувати запит">
+                                  <FaTimes />
+                                </button>
+                              ) : null 
+                            ) : (
+                              <button className="action-btn add-btn" onClick={() => handleFriendAction('request', person.id)} title="Додати в друзі">
+                                <FaUserPlus />
+                              </button>
+                            )
+                          )}
+                          <button className="action-btn msg-btn" onClick={() => setActiveChat({ type: 'direct', id: person.id, name: person.full_name })} title="Повідомлення">
+                            <FiMessageSquare />
+                          </button>
+                          <button className="action-btn block-btn" onClick={() => handleFriendAction('block', person.id, person.full_name)} title="Заблокувати">
+                            <FaBan />
+                          </button>
+                        </>
+                      )
+                    )}
+
+                    {/* Admin Ban Action - hide for self */}
+                    {currentUser.role === 'MODERATOR' && person.id !== currentUser.id && (
+                      <>
                         <button className="action-btn msg-btn" onClick={() => setActiveChat({ type: 'direct', id: person.id, name: person.full_name })} title="Повідомлення">
                           <FiMessageSquare />
                         </button>
-                        <button className="action-btn block-btn" onClick={() => handleFriendAction('block', person.id, person.full_name)} title="Заблокувати">
-                          <FaBan />
+                        <button 
+                          className={clsx('action-btn', person.is_banned ? 'unban-btn' : 'block-btn')} 
+                          onClick={() => person.is_banned ? handleUnban(person.id) : handleAdminAction('ban', person.id, person.full_name)} 
+                          title={person.is_banned ? 'Розбанити' : 'Забанити акаунт'}
+                        >
+                          <FaUserShield />
                         </button>
-                        {currentUser.role === 'MODERATOR' && (
-                          <button 
-                            className={clsx('action-btn', person.is_banned ? 'unban-btn' : 'block-btn')} 
-                            onClick={() => person.is_banned ? handleUnban(person.id) : handleAdminAction('ban', person.id, person.full_name)} 
-                            title={person.is_banned ? 'Розбанити' : 'Забанити акаунт'}
-                          >
-                            <FaUserCircle />
-                          </button>
-                        )}
                       </>
                     )}
                   </div>
@@ -520,7 +589,44 @@ const ChatPanel = ({ currentUser }) => {
                 )}
               </div>
               <div className="chat-item-name">{activeChat.name}</div>
+              {activeChat.type === 'event' && (
+                <button 
+                  className="action-btn" 
+                  onClick={() => setShowChatParticipants(!showChatParticipants)}
+                  title="Учасники"
+                  style={{ marginLeft: 'auto' }}
+                >
+                  <FaUsers size={16} />
+                </button>
+              )}
             </div>
+
+            {/* Participant dropdown for event chats */}
+            {showChatParticipants && activeChat.type === 'event' && (
+              <div className="chat-participants-dropdown">
+                <div className="chat-participants-title">Учасники ({chatParticipants.length})</div>
+                {chatParticipants.map(p => (
+                  <div key={p.id} className="chat-participant-item">
+                    <div className="chat-item-avatar" style={{ width: 28, height: 28, fontSize: '0.7rem', background: p.photo_url ? 'transparent' : '#10b981' }}>
+                      {p.photo_url ? <img src={p.photo_url} alt={p.full_name} /> : p.full_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="chat-participant-info">
+                      <span className="chat-participant-name">{p.full_name}</span>
+                      {p.id === activeChat.creator_id && <span className="participant-author-badge">Автор</span>}
+                    </div>
+                    {p.id !== activeChat.creator_id && p.id !== currentUser.id && (currentUser.id === activeChat.creator_id || currentUser.role === 'MODERATOR') && (
+                      <button 
+                        className="kick-participant-btn-small" 
+                        onClick={() => handleAdminAction('kick', p.id, p.full_name)}
+                        title="Видалити з івенту"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="active-chat-messages">
               {messages.length === 0 && (

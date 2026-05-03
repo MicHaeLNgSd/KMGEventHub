@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -10,6 +10,7 @@ import ScrollToTop from './components/ScrollToTop'
 import ChatPanel from './components/ChatPanel'
 import API from './utils/api'
 import { useOnlineStatus } from './hooks/useOnlineStatus'
+import { socketService } from './services/socketService'
 import './App.css'
 
 function App() {
@@ -34,6 +35,28 @@ function App() {
       setLoading(false)
     }
   }, [])
+
+  // Connect socket when user is available, handle ban
+  useEffect(() => {
+    if (user) {
+      socketService.connect();
+      socketService.joinPersonalRoom(user.id);
+
+      const handleBanned = () => {
+        localStorage.removeItem('authToken');
+        setUser(null);
+        socketService.disconnect();
+        window.location.href = '/login';
+      };
+      socketService.onAccountBanned(handleBanned);
+
+      return () => {
+        socketService.offAccountBanned(handleBanned);
+      };
+    } else {
+      socketService.disconnect();
+    }
+  }, [user])
 
   const isModerator = user?.role === 'MODERATOR'
 

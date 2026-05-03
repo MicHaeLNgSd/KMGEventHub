@@ -289,7 +289,7 @@ export default function HomePage({ currentUser, setUser }) {
 
   return (
     <div className={clsx('page-shell', showCreatePanel && 'with-panel')}>
-      <Header />
+      <Header currentUser={currentUser} />
 
       <main className={clsx('app-shell', showCreatePanel && 'with-panel')}>
         <div className="page-card">

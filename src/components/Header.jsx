@@ -8,7 +8,7 @@ export default function Header({ currentUser: user }) {
   const isModerator = user?.role === 'MODERATOR'
 
   return (
-    <header className="site-header">
+    <header className={clsx('site-header', isModerator && 'admin-header')}>
       <div className="header-left">
         <Link to="/home" className="brand-link">
           <span className={clsx('brand-logo', isModerator && 'admin')}>KMG</span>

@@ -373,6 +373,10 @@ app.post('/api/friends/request', authenticateToken, async (req, res) => {
       [userId, friendId]
     );
 
+    // Notify the target user in real-time
+    const senderInfo = await pool.query('SELECT full_name FROM users WHERE id = $1', [userId]);
+    io.to(`user_${friendId}`).emit('friendRequestReceived', { fromUserId: userId, fromName: senderInfo.rows[0]?.full_name });
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -394,6 +398,10 @@ app.put('/api/friends/accept', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Request not found' });
     }
 
+    // Notify the original requester that their request was accepted
+    const acceptorInfo = await pool.query('SELECT full_name FROM users WHERE id = $1', [userId]);
+    io.to(`user_${friendId}`).emit('friendRequestAccepted', { byUserId: userId, byName: acceptorInfo.rows[0]?.full_name });
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -410,6 +418,9 @@ app.delete('/api/friends/remove', authenticateToken, async (req, res) => {
       'DELETE FROM user_friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
       [userId, friendId]
     );
+
+    // Notify the other user
+    io.to(`user_${friendId}`).emit('friendRemoved', { byUserId: userId });
 
     res.json({ success: true });
   } catch (error) {
@@ -443,6 +454,9 @@ app.post('/api/friends/block', authenticateToken, async (req, res) => {
       [userId, friendId]
     );
 
+    // Notify blocked user
+    io.to(`user_${friendId}`).emit('userBlocked', { byUserId: userId });
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error blocking user:', error);
@@ -461,6 +475,9 @@ app.delete('/api/friends/unblock', authenticateToken, async (req, res) => {
       [userId, friendId]
     );
 
+    // Notify unblocked user
+    io.to(`user_${friendId}`).emit('userUnblocked', { byUserId: userId });
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -475,6 +492,10 @@ app.put('/api/users/:id/ban', authenticateToken, async (req, res) => {
     }
     const { id } = req.params;
     await pool.query('UPDATE users SET is_banned = true WHERE id = $1', [id]);
+
+    // Force-disconnect banned user immediately
+    io.to(`user_${id}`).emit('accountBanned', {});
+
     res.json({ success: true, message: 'User banned' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -511,6 +532,14 @@ app.delete('/api/events/:id/participants/:userId', authenticateToken, async (req
     }
 
     await pool.query('DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2', [eventId, participantId]);
+
+    // Notify the kicked user
+    const eventInfo = await pool.query('SELECT title FROM events WHERE id = $1', [eventId]);
+    io.to(`user_${participantId}`).emit('kickedFromEvent', { eventId: parseInt(eventId), eventTitle: eventInfo.rows[0]?.title });
+
+    // Notify all event participants so their UI updates
+    io.to(`event_${eventId}`).emit('participantLeft', { eventId: parseInt(eventId), userId: parseInt(participantId) });
+
     res.json({ success: true, message: 'Participant removed' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -989,6 +1018,9 @@ app.put('/api/events/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
+    // Notify participants about event update
+    io.to(`event_${id}`).emit('eventUpdated', { eventId: parseInt(id), event: result.rows[0] });
+
     res.json({ message: 'Event updated successfully', event: result.rows[0] });
   } catch (error) {
     console.error('Error updating event:', error);
@@ -1000,6 +1032,9 @@ app.put('/api/events/:id', authenticateToken, async (req, res) => {
 app.delete('/api/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Notify participants before deletion
+    io.to(`event_${id}`).emit('eventDeleted', { eventId: parseInt(id) });
 
     const result = await pool.query(
       'DELETE FROM events WHERE id = $1 RETURNING id',
@@ -1034,6 +1069,10 @@ app.post('/api/events/:id/join', authenticateToken, async (req, res) => {
       [id, userId]
     );
 
+    // Notify event chat about new participant
+    const userInfo = await pool.query('SELECT id, full_name, nickname, photo_url FROM users WHERE id = $1', [userId]);
+    io.to(`event_${id}`).emit('participantJoined', { eventId: parseInt(id), user: userInfo.rows[0] });
+
     res.status(201).json({ message: 'Ви успішно приєдналися до заходу', participant: result.rows[0] });
   } catch (error) {
     console.error('Error joining event:', error);
@@ -1055,6 +1094,9 @@ app.delete('/api/events/:id/leave', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Ви не є учасником цього заходу' });
     }
+
+    // Notify event chat about participant leaving
+    io.to(`event_${id}`).emit('participantLeft', { eventId: parseInt(id), userId });
 
     res.json({ message: 'Ви успішно покинули захід' });
   } catch (error) {
@@ -1231,6 +1273,19 @@ app.delete('/api/messages/:id', authenticateToken, async (req, res) => {
     }
 
     await pool.query('DELETE FROM messages WHERE id = $1', [id]);
+
+    // Notify chat participants about message deletion
+    if (message.event_id) {
+      io.to(`event_${message.event_id}`).emit('messageDeleted', { messageId: parseInt(id) });
+    } else {
+      // Direct message - notify both users
+      const fullMsg = await pool.query('SELECT sender_id, receiver_id FROM messages WHERE id = $1', [id]);
+      // Message already deleted, use data we fetched earlier
+      const minId = Math.min(message.sender_id, userId);
+      const maxId = Math.max(message.sender_id, userId);
+      io.to(`direct_${minId}_${maxId}`).emit('messageDeleted', { messageId: parseInt(id) });
+    }
+
     res.json({ success: true, message: 'Message deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
