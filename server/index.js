@@ -60,6 +60,14 @@ io.on('connection', (socket) => {
     socket.leave(`event_${eventId}`);
     console.log(`User ${socket.user.id} left event_${eventId}`);
   });
+  
+  socket.on('joinPersonalRoom', (userId) => {
+    // Only allow joining own room for security
+    if (socket.user.id === parseInt(userId, 10)) {
+      socket.join(`user_${userId}`);
+      console.log(`User ${socket.user.id} joined personal room user_${userId}`);
+    }
+  });
 
   socket.on('sendMessage', async (data) => {
     try {
@@ -91,6 +99,62 @@ io.on('connection', (socket) => {
       io.to(`event_${eventId}`).emit('newMessage', newMessage);
     } catch (err) {
       console.error('Socket sendMessage error:', err);
+      socket.emit('messageError', { error: 'Помилка при відправці повідомлення' });
+    }
+  });
+
+  socket.on('joinDirectChat', (friendId) => {
+    const minId = Math.min(socket.user.id, parseInt(friendId, 10));
+    const maxId = Math.max(socket.user.id, parseInt(friendId, 10));
+    socket.join(`direct_${minId}_${maxId}`);
+    console.log(`User ${socket.user.id} joined direct_${minId}_${maxId}`);
+  });
+
+  socket.on('leaveDirectChat', (friendId) => {
+    const minId = Math.min(socket.user.id, parseInt(friendId, 10));
+    const maxId = Math.max(socket.user.id, parseInt(friendId, 10));
+    socket.leave(`direct_${minId}_${maxId}`);
+    console.log(`User ${socket.user.id} left direct_${minId}_${maxId}`);
+  });
+
+  socket.on('sendDirectMessage', async (data) => {
+    try {
+      const { receiverId, text } = data;
+      const senderId = socket.user.id;
+
+      if (!text || !text.trim() || !receiverId) return;
+
+      const result = await pool.query(
+        `INSERT INTO messages (sender_id, receiver_id, text)
+         VALUES ($1, $2, $3)
+         RETURNING id, text, created_at`,
+        [senderId, receiverId, text.trim()]
+      );
+
+      const message = result.rows[0];
+      const userResult = await pool.query('SELECT id, full_name, nickname FROM users WHERE id = $1', [senderId]);
+      const sender = userResult.rows[0];
+
+      const newMessage = {
+        id: message.id,
+        text: message.text,
+        created_at: message.created_at,
+        sender_id: sender.id,
+        receiver_id: receiverId,
+        sender_name: sender.full_name,
+        sender_nickname: sender.nickname
+      };
+
+      const minId = Math.min(senderId, parseInt(receiverId, 10));
+      const maxId = Math.max(senderId, parseInt(receiverId, 10));
+      io.to(`direct_${minId}_${maxId}`).emit('newDirectMessage', newMessage);
+      
+      // Also emit an event to notify the receiver for the overall chat list update (global notification)
+      // They might not be in the direct room, so we emit to their personal room if they joined one
+      io.to(`user_${receiverId}`).emit('chatListUpdate', newMessage);
+      io.to(`user_${senderId}`).emit('chatListUpdate', newMessage);
+    } catch (err) {
+      console.error('Socket sendDirectMessage error:', err);
       socket.emit('messageError', { error: 'Помилка при відправці повідомлення' });
     }
   });
@@ -753,6 +817,70 @@ app.post('/api/events/:id/messages', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Error sending message:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get personal chat list (distinct users communicated with)
+app.get('/api/chats/personal', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Fetch latest message per conversational partner
+    const result = await pool.query(`
+      WITH RankedMessages AS (
+        SELECT 
+          m.id, m.text, m.created_at, m.sender_id, m.receiver_id,
+          CASE 
+            WHEN m.sender_id = $1 THEN m.receiver_id 
+            ELSE m.sender_id 
+          END as partner_id,
+          ROW_NUMBER() OVER (
+            PARTITION BY CASE WHEN m.sender_id = $1 THEN m.receiver_id ELSE m.sender_id END 
+            ORDER BY m.created_at DESC
+          ) as rn
+        FROM messages m
+        WHERE (m.sender_id = $1 AND m.receiver_id IS NOT NULL) OR (m.receiver_id = $1)
+      )
+      SELECT 
+        rm.id as message_id, 
+        rm.text as last_message, 
+        rm.created_at as last_message_time,
+        rm.sender_id as last_sender_id,
+        u.id as friend_id, 
+        u.full_name as friend_name, 
+        u.nickname as friend_nickname,
+        u.is_active as is_online
+      FROM RankedMessages rm
+      JOIN users u ON rm.partner_id = u.id
+      WHERE rm.rn = 1
+      ORDER BY rm.created_at DESC
+    `, [userId]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching personal chats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get direct messages with a specific user
+app.get('/api/messages/direct/:friendId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { friendId } = req.params;
+    
+    const result = await pool.query(`
+      SELECT m.id, m.text, m.created_at, m.receiver_id, u.id as sender_id, u.full_name as sender_name, u.nickname as sender_nickname
+      FROM messages m
+      JOIN users u ON m.sender_id = u.id
+      WHERE (m.sender_id = $1 AND m.receiver_id = $2) OR (m.sender_id = $2 AND m.receiver_id = $1)
+      ORDER BY m.created_at ASC
+    `, [userId, friendId]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching direct messages:', error);
     res.status(500).json({ error: error.message });
   }
 });

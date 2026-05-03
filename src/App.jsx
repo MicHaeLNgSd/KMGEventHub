@@ -7,6 +7,7 @@ import AccountPage from './pages/AccountPage'
 import ContactPage from './pages/ContactPage'
 import AboutPage from './pages/AboutPage'
 import ScrollToTop from './components/ScrollToTop'
+import ChatPanel from './components/ChatPanel'
 import API from './utils/api'
 import { useOnlineStatus } from './hooks/useOnlineStatus'
 import './App.css'
@@ -57,6 +58,7 @@ function App() {
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
       <ScrollToTop />
+      {user && <ChatPanel currentUser={user} />}
     </BrowserRouter>
   )
 }

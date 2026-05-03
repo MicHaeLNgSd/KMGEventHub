@@ -62,6 +62,54 @@ class SocketService {
     }
   }
 
+  joinDirectChat(friendId) {
+    if (this.socket) {
+      this.socket.emit('joinDirectChat', friendId);
+    }
+  }
+
+  leaveDirectChat(friendId) {
+    if (this.socket) {
+      this.socket.emit('leaveDirectChat', friendId);
+    }
+  }
+
+  sendDirectMessage(receiverId, text) {
+    if (this.socket) {
+      this.socket.emit('sendDirectMessage', { receiverId, text });
+    }
+  }
+
+  onNewDirectMessage(callback) {
+    if (this.socket) {
+      this.socket.on('newDirectMessage', callback);
+    }
+  }
+
+  offNewDirectMessage(callback) {
+    if (this.socket) {
+      this.socket.off('newDirectMessage', callback);
+    }
+  }
+
+  joinPersonalRoom(userId) {
+    if (this.socket) {
+      this.socket.emit('joinPersonalRoom', userId);
+    }
+  }
+
+  onChatListUpdate(callback) {
+    if (this.socket) {
+      this.socket.on('chatListUpdate', callback);
+    }
+  }
+
+  offChatListUpdate(callback) {
+    if (this.socket) {
+      this.socket.off('chatListUpdate', callback);
+    }
+  }
+
   onMessageError(callback) {
     if (this.socket) {
       this.socket.on('messageError', callback);
