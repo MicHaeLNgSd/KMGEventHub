@@ -42,6 +42,7 @@ const ChatPanel = ({ currentUser }) => {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
+
   // Initial Data Loading
   useEffect(() => {
     if (!currentUser) return;
@@ -363,6 +364,9 @@ const ChatPanel = ({ currentUser }) => {
           <>
             <div className="chat-panel-header">
               <h2><FaComments /> Месенджер</h2>
+              <button className="chat-close-x-btn" onClick={() => setIsOpen(false)} title="Закрити">
+                <FaTimes size={18} />
+              </button>
               <div className="chat-search-wrapper">
                 <FaSearch className="chat-search-icon" />
                 <input 
@@ -589,16 +593,20 @@ const ChatPanel = ({ currentUser }) => {
                 )}
               </div>
               <div className="chat-item-name">{activeChat.name}</div>
-              {activeChat.type === 'event' && (
-                <button 
-                  className="action-btn" 
-                  onClick={() => setShowChatParticipants(!showChatParticipants)}
-                  title="Учасники"
-                  style={{ marginLeft: 'auto' }}
-                >
-                  <FaUsers size={16} />
+              <div className="active-chat-actions">
+                {activeChat.type === 'event' && (
+                  <button 
+                    className="action-btn" 
+                    onClick={() => setShowChatParticipants(!showChatParticipants)}
+                    title="Учасники"
+                  >
+                    <FaUsers size={16} />
+                  </button>
+                )}
+                <button className="chat-close-x-btn" onClick={() => setIsOpen(false)} title="Закрити">
+                  <FaTimes size={18} />
                 </button>
-              )}
+              </div>
             </div>
 
             {/* Participant dropdown for event chats */}

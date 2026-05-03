@@ -3,10 +3,47 @@
   top: 0;
   left: 0;
   height: 100vh;
-  z-index: 2000;
+  z-index: 1100;
   display: flex;
   transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none; /* Let clicks pass through to page when closed */
+  box-shadow: 10px 0 30px rgba(0,0,0,0.1);
+  background: var(--surface);
+}
+
+.chat-panel-header {
+  position: relative;
+  padding: 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-close-x-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 8px;
+  border-radius: 50%;
+  display: none; /* Hidden on desktop */
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.chat-close-x-btn:hover {
+  background: rgba(0,0,0,0.05);
+  color: var(--danger, #ef4444);
+}
+
+.active-chat-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .chat-panel-container.closed {
@@ -606,4 +643,57 @@
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   cursor: pointer;
+}
+
+/* ========== RESPONSIVE: MOBILE (<=600px) ========== */
+@media (max-width: 600px) {
+  .chat-panel-container {
+    width: 100%;
+    top: 0;
+    height: 100vh;
+  }
+  
+  .chat-panel-container.at-top {
+    top: 62px;
+    height: calc(100vh - 62px);
+  }
+  
+  .chat-close-x-btn {
+    display: flex; /* Visible on mobile */
+  }
+  
+  .chat-panel-container.closed {
+    transform: translateX(-100%);
+  }
+  
+  .chat-panel-main {
+    width: 100vw;
+  }
+  
+  .chat-panel-trigger {
+    left: 100%;
+    top: 15px;
+    transform: none;
+    width: 32px;
+    height: 44px;
+    border-radius: 0 8px 8px 0;
+    display: flex; /* Ensure it's visible */
+  }
+  
+  /* Hide the trigger when panel is open on mobile to avoid overlap with content */
+  .chat-panel-container.open .chat-panel-trigger {
+    display: none;
+  }
+  
+  .chat-panel-sidebar {
+    width: 60px;
+  }
+  
+  .tab-btn {
+    padding: 12px 0;
+  }
+  
+  .tab-btn span {
+    display: none;
+  }
 }

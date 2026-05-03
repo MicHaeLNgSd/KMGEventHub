@@ -107,3 +107,36 @@
   color: #666;
   margin-top: 5px;
 }
+
+/* ========== RESPONSIVE: MOBILE (<=600px) ========== */
+@media (max-width: 600px) {
+  .account-logout-btn {
+    position: static;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+  
+  .profile-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 15px;
+  }
+  
+  .profile-avatar-block {
+    width: 100px;
+    height: 100px;
+    border-radius: 30px;
+  }
+  
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .profile-field-full {
+    grid-column: span 1;
+  }
+  
+  .button-half {
+    width: 100%;
+  }
+}
