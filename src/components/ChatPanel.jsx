@@ -152,12 +152,66 @@ const ChatPanel = ({ currentUser }) => {
         }
       } else if (action === 'remove') {
         await chatService.removeFriend(targetId);
+      } else if (action === 'ban') {
+        await chatService.banUser(targetId);
+      } else if (action === 'unban') {
+        await chatService.unbanUser(targetId);
+      } else if (action === 'kick') {
+        await chatService.kickParticipant(activeChat.id, targetId);
+      } else if (action === 'deleteMessage') {
+        await API.delete(`/messages/${targetId}`);
+        setMessages(prev => prev.filter(m => m.id !== targetId));
       }
       loadTabData();
     } catch (err) {
       console.error(`Error during ${action} confirmation:`, err);
     }
     setConfirmModal(prev => ({ ...prev, show: false }));
+  };
+
+  const handleAdminAction = async (action, id, name) => {
+    if (action === 'ban') {
+      setConfirmModal({
+        show: true,
+        title: 'Забанити акаунт?',
+        message: `Ви впевнені, що хочете забанити ${name}? Користувач більше не зможе увійти в систему.`,
+        confirmText: 'Забанити',
+        type: 'danger',
+        action: 'ban',
+        targetId: id,
+        targetName: name
+      });
+    } else if (action === 'kick') {
+      setConfirmModal({
+        show: true,
+        title: 'Видалити з івенту?',
+        message: `Ви впевнені, що хочете видалити ${name} з цього заходу?`,
+        confirmText: 'Видалити',
+        type: 'danger',
+        action: 'kick',
+        targetId: id,
+        targetName: name
+      });
+    } else if (action === 'deleteMessage') {
+      setConfirmModal({
+        show: true,
+        title: 'Видалити повідомлення?',
+        message: 'Ви впевнені, що хочете видалити це повідомлення? Цю дію неможливо скасувати.',
+        confirmText: 'Видалити',
+        type: 'danger',
+        action: 'deleteMessage',
+        targetId: id
+      });
+    }
+  };
+
+  const handleUnban = async (id) => {
+    try {
+      await chatService.unbanUser(id);
+      loadTabData();
+    } catch (err) {
+      console.error('Error unbanning user:', err);
+    }
   };
 
   const handleFriendAction = async (action, friendId, friendName) => {
@@ -223,7 +277,7 @@ const ChatPanel = ({ currentUser }) => {
                              p.nickname.toLowerCase().includes(query);
         
         if (peopleFilter === 'friends') return matchesQuery && p.friendship_status === 'accepted';
-        if (peopleFilter === 'banned') return matchesQuery && p.is_blocked_by_me;
+        if (peopleFilter === 'banned') return matchesQuery && (p.is_blocked_by_me || (isModerator && p.is_banned));
         
         // In 'all', hide people who blocked me or who I blocked
         return matchesQuery && p.friendship_status !== 'blocked';
@@ -345,7 +399,7 @@ const ChatPanel = ({ currentUser }) => {
               ))}
 
               {activeTab === 'events' && filteredData.map(event => (
-                <div key={event.id} className="chat-item" onClick={() => setActiveChat({ type: 'event', id: event.id, name: event.title })}>
+                <div key={event.id} className="chat-item" onClick={() => setActiveChat({ type: 'event', id: event.id, name: event.title, creator_id: event.creator_id })}>
                   <div className="chat-item-avatar" style={{ background: event.photo_url ? 'transparent' : '#f59e0b' }}>
                     {event.photo_url ? (
                       <img src={event.photo_url} alt={event.title} />
@@ -407,6 +461,15 @@ const ChatPanel = ({ currentUser }) => {
                         <button className="action-btn block-btn" onClick={() => handleFriendAction('block', person.id, person.full_name)} title="Заблокувати">
                           <FaBan />
                         </button>
+                        {currentUser.role === 'MODERATOR' && (
+                          <button 
+                            className={clsx('action-btn', person.is_banned ? 'unban-btn' : 'block-btn')} 
+                            onClick={() => person.is_banned ? handleUnban(person.id) : handleAdminAction('ban', person.id, person.full_name)} 
+                            title={person.is_banned ? 'Розбанити' : 'Забанити акаунт'}
+                          >
+                            <FaUserCircle />
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -479,8 +542,19 @@ const ChatPanel = ({ currentUser }) => {
                         )}
                       </div>
                     )}
-                    <div className="chat-message-content">
-                      {!isMine && <div className="chat-message-sender">{msg.sender_name}</div>}
+                      <div className="chat-message-content">
+                        <div className="chat-message-header-line">
+                          {!isMine && <div className="chat-message-sender">{msg.sender_name}</div>}
+                          {(isMine || (activeChat.type === 'event' && (currentUser.id === activeChat.creator_id || currentUser.role === 'MODERATOR'))) && (
+                            <button 
+                              className="delete-msg-btn" 
+                              onClick={() => handleAdminAction('deleteMessage', msg.id)}
+                              title="Видалити повідомлення"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
                       <div className={clsx('chat-message-bubble', isMine ? 'mine' : 'theirs')}>
                         {msg.text}
                       </div>

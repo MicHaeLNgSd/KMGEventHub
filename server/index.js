@@ -213,11 +213,17 @@ const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = verifyToken(token);
-    const userResult = await pool.query('SELECT id, role FROM users WHERE id = $1', [decoded.id]);
+    const userResult = await pool.query('SELECT id, role, is_banned FROM users WHERE id = $1', [decoded.id]);
     if (userResult.rows.length === 0) {
       return res.status(401).json({ error: 'User not found' });
     }
-    req.user = userResult.rows[0];
+    
+    const user = userResult.rows[0];
+    if (user.is_banned) {
+      return res.status(403).json({ error: 'Your account is banned' });
+    }
+    
+    req.user = user;
     next();
   } catch (error) {
     res.status(401).json({ error: 'Invalid or expired token' });
@@ -260,7 +266,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
       LEFT JOIN user_friends uf ON 
         (uf.user_id = $1 AND uf.friend_id = u.id) OR 
         (uf.user_id = u.id AND uf.friend_id = $1)
-      WHERE u.id <> $1
+      WHERE u.id <> $1 AND u.is_active = true
       ORDER BY u.created_at DESC
     `, [userId]);
     
@@ -461,6 +467,56 @@ app.delete('/api/friends/unblock', authenticateToken, async (req, res) => {
   }
 });
 
+// Admin: Ban user
+app.put('/api/users/:id/ban', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'MODERATOR') {
+      return res.status(403).json({ error: 'Only admins can ban users' });
+    }
+    const { id } = req.params;
+    await pool.query('UPDATE users SET is_banned = true WHERE id = $1', [id]);
+    res.json({ success: true, message: 'User banned' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Admin: Unban user
+app.put('/api/users/:id/unban', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'MODERATOR') {
+      return res.status(403).json({ error: 'Only admins can unban users' });
+    }
+    const { id } = req.params;
+    await pool.query('UPDATE users SET is_banned = false WHERE id = $1', [id]);
+    res.json({ success: true, message: 'User unbanned' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Admin/Author: Remove participant from event
+app.delete('/api/events/:id/participants/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { id: eventId, userId: participantId } = req.params;
+    const userId = req.user.id;
+
+    // Check if requester is author or admin
+    const eventResult = await pool.query('SELECT creator_id FROM events WHERE id = $1', [eventId]);
+    if (eventResult.rows.length === 0) return res.status(404).json({ error: 'Event not found' });
+    
+    const event = eventResult.rows[0];
+    if (event.creator_id !== userId && req.user.role !== 'MODERATOR') {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    await pool.query('DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2', [eventId, participantId]);
+    res.json({ success: true, message: 'Participant removed' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all events with optional filtering
 app.get('/api/events', async (req, res) => {
   try {
@@ -524,11 +580,37 @@ app.get('/api/events', async (req, res) => {
       if (myEvents === 'true') {
         whereClauses.push(`e.creator_id = $${whereClauses.length + 1}`);
         queryParams.push(userId);
-      }
-      if (joinedEvents === 'true') {
+      } else if (joinedEvents === 'true') {
         whereClauses.push(`e.id IN (SELECT event_id FROM event_participants WHERE user_id = $${whereClauses.length + 1} AND status IN ('approved', 'pending', 'registered'))`);
         queryParams.push(userId);
+      } else {
+        // General list: hide private events unless admin or friend
+        // Also hide events from people who blocked the viewer
+        whereClauses.push(`(
+          e.is_private = false 
+          OR e.creator_id = $${whereClauses.length + 1} 
+          OR EXISTS (SELECT 1 FROM users WHERE id = $${whereClauses.length + 1} AND role = 'MODERATOR')
+          OR EXISTS (
+            SELECT 1 FROM user_friends uf 
+            WHERE uf.status = 'accepted' 
+            AND ((uf.user_id = e.creator_id AND uf.friend_id = $${whereClauses.length + 1}) 
+                 OR (uf.user_id = $${whereClauses.length + 1} AND uf.friend_id = e.creator_id))
+          )
+        )`);
+        queryParams.push(userId);
+        
+        // Block logic: hide events from people who blocked the viewer
+        whereClauses.push(`NOT EXISTS (
+          SELECT 1 FROM user_friends uf 
+          WHERE uf.status = 'blocked' 
+          AND uf.user_id = e.creator_id 
+          AND uf.friend_id = $${whereClauses.length + 1}
+        )`);
+        queryParams.push(userId);
       }
+    } else {
+      // No userId (unauthenticated) - hide all private events
+      whereClauses.push(`e.is_private = false`);
     }
 
     if (whereClauses.length > 0) {
@@ -737,7 +819,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT id, full_name, nickname, age, email, phone_number, password_hash FROM users WHERE email = $1',
+      'SELECT id, full_name, nickname, age, email, phone_number, password_hash, role, is_banned FROM users WHERE email = $1',
       [trimmedEmail]
     );
 
@@ -753,6 +835,9 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const { password_hash, ...userData } = user;
+    if (user.is_banned) {
+      return res.status(403).json({ error: 'Цей акаунт заблоковано адміністратором.' });
+    }
     const token = generateToken({ id: userData.id, email: userData.email });
     res.json({ message: 'Успішний вхід.', token, user: { id: userData.id, full_name: userData.full_name, nickname: userData.nickname, role: userData.role } });
   } catch (error) {
@@ -984,7 +1069,10 @@ app.get('/api/events/:id/messages', authenticateToken, async (req, res) => {
     const { id } = req.params;
     
     const result = await pool.query(`
-      SELECT m.id, m.text, m.created_at, u.id as sender_id, u.full_name as sender_name, u.nickname as sender_nickname, u.photo_url as sender_photo
+      SELECT m.id, m.text, m.created_at, u.id as sender_id, 
+             CASE WHEN u.is_active = true THEN u.full_name ELSE 'Deleted' END as sender_name,
+             CASE WHEN u.is_active = true THEN u.nickname ELSE 'deleted' END as sender_nickname,
+             CASE WHEN u.is_active = true THEN u.photo_url ELSE NULL END as sender_photo
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE m.event_id = $1
@@ -1094,7 +1182,10 @@ app.get('/api/messages/direct/:friendId', authenticateToken, async (req, res) =>
     const { friendId } = req.params;
     
     const result = await pool.query(`
-      SELECT m.id, m.text, m.created_at, m.receiver_id, u.id as sender_id, u.full_name as sender_name, u.nickname as sender_nickname, u.photo_url as sender_photo
+      SELECT m.id, m.text, m.created_at, m.receiver_id, u.id as sender_id, 
+             CASE WHEN u.is_active = true THEN u.full_name ELSE 'Deleted' END as sender_name,
+             CASE WHEN u.is_active = true THEN u.nickname ELSE 'deleted' END as sender_nickname,
+             CASE WHEN u.is_active = true THEN u.photo_url ELSE NULL END as sender_photo
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE (m.sender_id = $1 AND m.receiver_id = $2) OR (m.sender_id = $2 AND m.receiver_id = $1)
@@ -1104,6 +1195,44 @@ app.get('/api/messages/direct/:friendId', authenticateToken, async (req, res) =>
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching direct messages:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete message
+app.delete('/api/messages/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // Check message info
+    const msgResult = await pool.query('SELECT sender_id, event_id FROM messages WHERE id = $1', [id]);
+    if (msgResult.rows.length === 0) return res.status(404).json({ error: 'Message not found' });
+    
+    const message = msgResult.rows[0];
+    
+    // Check if user is sender
+    let canDelete = message.sender_id === userId;
+    
+    // If not sender, check if they are event creator or moderator
+    if (!canDelete) {
+      if (req.user.role === 'MODERATOR') {
+        canDelete = true;
+      } else if (message.event_id) {
+        const eventResult = await pool.query('SELECT creator_id FROM events WHERE id = $1', [message.event_id]);
+        if (eventResult.rows.length > 0 && eventResult.rows[0].creator_id === userId) {
+          canDelete = true;
+        }
+      }
+    }
+
+    if (!canDelete) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    await pool.query('DELETE FROM messages WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Message deleted' });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

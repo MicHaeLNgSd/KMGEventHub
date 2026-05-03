@@ -11,7 +11,7 @@ import { formatPhoneInput } from '../utils/formatters'
 import { FaPencilAlt, FaTrash } from 'react-icons/fa'
 import './AccountPage.css'
 
-export default function AccountPage() {
+export default function AccountPage({ currentUser: globalUser, setUser: setGlobalUser }) {
   const [user, setUser] = useState(null)
   const [form, setForm] = useState({
     full_name: '',
@@ -82,6 +82,7 @@ export default function AccountPage() {
       console.error('Failed to set offline status:', error)
     }
     localStorage.removeItem('authToken')
+    setGlobalUser(null)
     navigate('/login')
   }
 
@@ -205,7 +206,7 @@ export default function AccountPage() {
 
   return (
     <div className="page-shell">
-      <Header />
+      <Header currentUser={globalUser} />
 
       <main className="app-shell">
         <div className="page-card profile-card">

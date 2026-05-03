@@ -415,3 +415,54 @@
   border-top: 1px solid #eee;
   color: #888;
 }
+
+.chat-message-header-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.kick-participant-btn, .delete-msg-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+  opacity: 0.5;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.kick-participant-btn:hover, .delete-msg-btn:hover {
+  opacity: 1;
+  /* background: #fee2e2;s */
+}
+
+.kick-participant-btn-small {
+  background: #fef2f2;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  transition: all 0.2s;
+}
+
+.kick-participant-btn-small:hover {
+  background: #fee2e2;
+  transform: scale(1.1);
+}
+
+.participant-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

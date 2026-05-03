@@ -45,10 +45,10 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to="/home" replace />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/home" element={<HomePage />} />
-        <Route path="/account" element={<AccountPage />} />
+        <Route path="/login" element={<LoginPage setUser={setUser} />} />
+        <Route path="/register" element={<RegisterPage setUser={setUser} />} />
+        <Route path="/home" element={<HomePage currentUser={user} setUser={setUser} />} />
+        <Route path="/account" element={<AccountPage currentUser={user} setUser={setUser} />} />
         {!isModerator && (
           <>
             <Route path="/contacts" element={<ContactPage />} />

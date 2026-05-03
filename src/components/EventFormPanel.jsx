@@ -29,6 +29,8 @@ export default function EventFormPanel({
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showKickConfirm, setShowKickConfirm] = useState({ show: false, userId: null, userName: '' });
+  const [showMessageDeleteConfirm, setShowMessageDeleteConfirm] = useState({ show: false, messageId: null });
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -109,6 +111,26 @@ export default function EventFormPanel({
 
   const handleRemovePhoto = () => {
     handleFormChange({ target: { name: 'photo_url', value: null } });
+  };
+
+  const onKickParticipant = async () => {
+    try {
+      await API.delete(`/events/${selectedEvent.id}/participants/${showKickConfirm.userId}`);
+      setShowKickConfirm({ show: false, userId: null, userName: '' });
+      // In a real app we might emit a socket event or refetch
+    } catch (err) {
+      console.error('Error kicking participant:', err);
+    }
+  };
+
+  const onDeleteMessage = async () => {
+    try {
+      await API.delete(`/messages/${showMessageDeleteConfirm.messageId}`);
+      setMessages(prev => prev.filter(m => m.id !== showMessageDeleteConfirm.messageId));
+      setShowMessageDeleteConfirm({ show: false, messageId: null });
+    } catch (err) {
+      console.error('Error deleting message:', err);
+    }
   };
 
   return (
@@ -193,6 +215,17 @@ export default function EventFormPanel({
                 />
               </div>
             </div>
+
+            {isEditMode && (
+              <div className="form-group">
+                <label>Організатор</label>
+                <div className="organizer-display" style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', fontSize: '0.9rem' }}>
+                  {selectedEvent?.creator_id === currentUser?.id 
+                    ? `Ви` 
+                    : `${selectedEvent?.creator_name || 'Невідомо'} (@${selectedEvent?.creator_nickname || '?'})`}
+                </div>
+              </div>
+            )}
 
             <div className="form-group">
               <label htmlFor="title">Назва заходу *</label>
@@ -321,9 +354,23 @@ export default function EventFormPanel({
                         <div className="participant-name">{p.full_name}</div>
                         <div className="participant-nickname">@{p.nickname}</div>
                       </div>
-                      {p.id === selectedEvent.creator_id && (
-                        <span className="participant-author-badge">Автор</span>
-                      )}
+                      <div className="participant-actions">
+                        {p.id === selectedEvent.creator_id && (
+                          <span className="participant-author-badge">Автор</span>
+                        )}
+                        {p.id !== selectedEvent.creator_id && (currentUser?.id === selectedEvent?.creator_id || isModerator) && (
+                          <button 
+                            className="kick-participant-btn-small" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowKickConfirm({ show: true, userId: p.id, userName: p.full_name });
+                            }}
+                            title="Видалити з івенту"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     </li>
                   ))}
                   {sortedParticipants.length === 0 && (
@@ -350,12 +397,23 @@ export default function EventFormPanel({
                           {msg.sender_photo ? (
                             <img src={msg.sender_photo} alt={msg.sender_name} />
                           ) : (
-                            <div className="avatar-placeholder">{msg.sender_name.charAt(0).toUpperCase()}</div>
+                            <div className="avatar-placeholder">{msg.sender_name?.charAt(0).toUpperCase() || '?'}</div>
                           )}
                         </div>
                       )}
                       <div className="chat-message-content">
-                        {!isMine && <div className="chat-message-sender">{msg.sender_name}</div>}
+                        <div className="chat-message-header-line">
+                          {!isMine && <div className="chat-message-sender">{msg.sender_name}</div>}
+                          {(isMine || currentUser?.id === selectedEvent?.creator_id || isModerator) && (
+                            <button 
+                              className="delete-msg-btn" 
+                              onClick={() => setShowMessageDeleteConfirm({ show: true, messageId: msg.id })}
+                              title="Видалити повідомлення"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
                         <div className={clsx('chat-message-bubble', isMine ? 'mine' : 'theirs')}>
                           {msg.text}
                         </div>
@@ -403,6 +461,32 @@ export default function EventFormPanel({
               <button type="button" className="button button-danger" onClick={handleDeleteEvent} disabled={submitting}>
                 {submitting ? 'Видалення...' : 'Видалити'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showKickConfirm.show && (
+        <div className="delete-confirm-modal" onClick={() => setShowKickConfirm({ show: false, userId: null, userName: '' })}>
+          <div className="delete-confirm-content" onClick={e => e.stopPropagation()}>
+            <h3>Видалити з івенту?</h3>
+            <p>Ви впевнені, що хочете видалити <strong>{showKickConfirm.userName}</strong> з цього заходу?</p>
+            <div className="delete-confirm-actions">
+              <button type="button" className="button button-secondary" onClick={() => setShowKickConfirm({ show: false, userId: null, userName: '' })}>Скасувати</button>
+              <button type="button" className="button button-danger" onClick={onKickParticipant}>Видалити</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMessageDeleteConfirm.show && (
+        <div className="delete-confirm-modal" onClick={() => setShowMessageDeleteConfirm({ show: false, messageId: null })}>
+          <div className="delete-confirm-content" onClick={e => e.stopPropagation()}>
+            <h3>Видалити повідомлення?</h3>
+            <p>Ви впевнені, що хочете видалити це повідомлення? Цю дію неможливо скасувати.</p>
+            <div className="delete-confirm-actions">
+              <button type="button" className="button button-secondary" onClick={() => setShowMessageDeleteConfirm({ show: false, messageId: null })}>Скасувати</button>
+              <button type="button" className="button button-danger" onClick={onDeleteMessage}>Видалити</button>
             </div>
           </div>
         </div>

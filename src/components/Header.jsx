@@ -3,23 +3,7 @@ import { useState, useEffect } from 'react'
 import clsx from 'clsx'
 import API from '../utils/api'
 
-export default function Header() {
-  const [user, setUser] = useState(null)
-
-  useEffect(() => {
-    const token = localStorage.getItem('authToken')
-    if (token) {
-      API.get('/auth/me')
-        .then((res) => {
-          if (res.data.user) {
-            setUser(res.data.user)
-          }
-        })
-        .catch(() => {
-          localStorage.removeItem('authToken')
-        })
-    }
-  }, [])
+export default function Header({ currentUser: user }) {
 
   const isModerator = user?.role === 'MODERATOR'
 

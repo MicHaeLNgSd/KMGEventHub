@@ -502,6 +502,59 @@
 }
 
 /* Ensure modal inside chat panel is clickable and on top */
+.chat-panel-container .delete-confirm-content {
+  cursor: default;
+}
+
+.chat-message-header-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.kick-participant-btn, .delete-msg-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+  opacity: 0.5;
+  font-size: 0.75rem;
+}
+
+.kick-participant-btn:hover, .delete-msg-btn:hover {
+  opacity: 1;
+  background: #fee2e2;
+}
+
+.kick-participant-btn-small {
+  background: #fef2f2;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  transition: all 0.2s;
+}
+
+.kick-participant-btn-small:hover {
+  background: #fee2e2;
+  transform: scale(1.1);
+}
+
+.participant-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .chat-panel-container .delete-confirm-modal {
   pointer-events: auto;
   z-index: 3000;

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { authService } from '../services/authService'
 import { validateAge, validatePhone } from '../utils/validators'
 
-export default function RegisterPage() {
+export default function RegisterPage({ setUser }) {
   const [form, setForm] = useState({
     name: '',
     nickname: '',
@@ -50,6 +50,9 @@ export default function RegisterPage() {
 
       if (data.token) {
         localStorage.setItem('authToken', data.token)
+        if (data.user) {
+          setUser(data.user)
+        }
       }
       navigate('/home')
     } catch (error) {

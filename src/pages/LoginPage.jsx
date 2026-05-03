@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authService } from '../services/authService'
 
-export default function LoginPage() {
+export default function LoginPage({ setUser }) {
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -21,6 +21,9 @@ export default function LoginPage() {
 
       if (data.token) {
         localStorage.setItem('authToken', data.token)
+        if (data.user) {
+          setUser(data.user)
+        }
       }
       navigate('/home')
     } catch (error) {

@@ -44,5 +44,17 @@ export const chatService = {
   unblockUser: async (friendId) => {
     const response = await API.delete(`/friends/unblock?friendId=${friendId}`);
     return response.data;
+  },
+  kickParticipant: async (eventId, userId) => {
+    const response = await API.delete(`/events/${eventId}/participants/${userId}`);
+    return response.data;
+  },
+  banUser: async (userId) => {
+    const response = await API.put(`/users/${userId}/ban`);
+    return response.data;
+  },
+  unbanUser: async (userId) => {
+    const response = await API.put(`/users/${userId}/unban`);
+    return response.data;
   }
 };

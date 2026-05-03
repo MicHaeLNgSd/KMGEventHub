@@ -10,7 +10,7 @@ import { eventService } from '../services/eventService'
 import { authService } from '../services/authService'
 import { EVENT_CATEGORIES } from '../utils/categories'
 
-export default function HomePage() {
+export default function HomePage({ currentUser, setUser }) {
   const [search, setSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterMyEvents, setFilterMyEvents] = useState(false)
@@ -23,8 +23,7 @@ export default function HomePage() {
   const [error, setError] = useState(null)
   const [showCreatePanel, setShowCreatePanel] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState(null)
-  const [currentUser, setCurrentUser] = useState(null)
-  const [userLoading, setUserLoading] = useState(true)
+  const [userLoading, setUserLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalEvents, setTotalEvents] = useState(0)
@@ -44,24 +43,7 @@ export default function HomePage() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState(null)
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      const token = localStorage.getItem('authToken')
-      if (token) {
-        try {
-          const data = await authService.getCurrentUser()
-          if (data.user) {
-            setCurrentUser(data.user)
-          }
-        } catch (err) {
-          // Invalid token is handled by axios interceptor
-          console.error('Failed to fetch user:', err)
-        }
-      }
-      setUserLoading(false)
-    }
-    fetchUser()
-  }, [])
+  // Removed redundant fetchUser useEffect as currentUser is passed from App.jsx
 
   const isModerator = currentUser?.role === 'MODERATOR';
   const isOwner = selectedEvent?.creator_id === currentUser?.id;
@@ -75,11 +57,13 @@ export default function HomePage() {
       event_date: event.event_date,
       location: event.location,
       description: event.description,
-      participants: event.participant_count || 0,
+      participant_count: event.participant_count || 0,
       max_participants: event.max_participants,
       category: event.category,
       photo_url: event.photo_url,
       creator_id: event.creator_id,
+      creator_name: event.creator_name,
+      creator_nickname: event.creator_nickname,
       participant_ids: Array.isArray(event.participant_ids) ? event.participant_ids : [],
     }))
   }
@@ -294,7 +278,7 @@ export default function HomePage() {
   if (userLoading) {
     return (
       <div className="page-shell">
-        <Header />
+        <Header currentUser={currentUser} />
         <main className="app-shell">
           <div className="page-card">Завантаження...</div>
         </main>
