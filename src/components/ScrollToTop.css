@@ -1,0 +1,82 @@
+.scroll-to-top-wrapper {
+  position: absolute;
+  top: 0;
+  bottom: calc(150px + 2rem);
+  right: 0;
+  width: 100px;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.scroll-to-top {
+  position: sticky;
+  top: calc(100vh - 50px - 2rem); /* Sticks to bottom of viewport: 100vh - height - bottom margin */
+  margin-left: auto;
+  margin-right: 2rem;
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(20px) scale(0.8);
+  transition: opacity 0.4s ease, visibility 0.4s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+  color: #000;
+  pointer-events: auto;
+}
+
+.scroll-to-top svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  stroke-width: 2.5px;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.scroll-to-top.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+.scroll-to-top:hover {
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateY(-5px) scale(1.05);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.15);
+  border-color: rgba(0, 0, 0, 0.3);
+}
+
+.scroll-to-top:active {
+  transform: translateY(-2px) scale(0.95);
+}
+
+.arrow-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+}
+
+.scroll-to-top:hover .arrow-icon {
+  transform: translateY(-2px);
+}
+
+/* Ensure it works on mobile */
+@media (max-width: 768px) {
+  .scroll-to-top {
+    top: calc(100vh - 45px - 1.5rem);
+    margin-right: 1.5rem;
+    width: 45px;
+    height: 45px;
+  }
+}
