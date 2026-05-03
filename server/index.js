@@ -247,11 +247,33 @@ app.post('/api/upload', authenticateToken, upload.single('image'), (req, res) =>
   }
 });
 
-// Get all users
-app.get('/api/users', async (req, res) => {
+// Get all users with friendship status relative to current user
+app.get('/api/users', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, full_name, nickname, age, email, photo_url FROM users ORDER BY created_at DESC');
-    res.json(result.rows);
+    const userId = req.user.id;
+    const result = await pool.query(`
+      SELECT 
+        u.id, u.full_name, u.nickname, u.age, u.email, u.photo_url,
+        uf.status as friendship_status,
+        uf.user_id as requester_id
+      FROM users u
+      LEFT JOIN user_friends uf ON 
+        (uf.user_id = $1 AND uf.friend_id = u.id) OR 
+        (uf.user_id = u.id AND uf.friend_id = $1)
+      WHERE u.id <> $1
+      ORDER BY u.created_at DESC
+    `, [userId]);
+    
+    // We'll process the results to make it easier for the frontend
+    // Specifically, if status is 'blocked', we want to know if WE blocked them
+    const users = result.rows.map(row => {
+      if (row.friendship_status === 'blocked') {
+        row.is_blocked_by_me = (row.requester_id === userId);
+      }
+      return row;
+    });
+
+    res.json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -297,6 +319,143 @@ app.get('/api/users/:id', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// FRIENDSHIP ENDPOINTS
+
+// Get pending friend requests
+app.get('/api/friends/requests', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const result = await pool.query(`
+      SELECT u.id, u.full_name, u.nickname, u.photo_url, uf.created_at
+      FROM user_friends uf
+      JOIN users u ON uf.user_id = u.id
+      WHERE uf.friend_id = $1 AND uf.status = 'pending'
+    `, [userId]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send friend request
+app.post('/api/friends/request', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { friendId } = req.body;
+    
+    if (userId === parseInt(friendId)) {
+      return res.status(400).json({ error: 'Cannot add yourself as friend' });
+    }
+
+    // Check if record exists
+    const existing = await pool.query(
+      'SELECT status FROM user_friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+      [userId, friendId]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Relation already exists' });
+    }
+
+    await pool.query(
+      'INSERT INTO user_friends (user_id, friend_id, status) VALUES ($1, $2, \'pending\')',
+      [userId, friendId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Accept friend request
+app.put('/api/friends/accept', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { friendId } = req.body;
+
+    const result = await pool.query(
+      'UPDATE user_friends SET status = \'accepted\' WHERE user_id = $1 AND friend_id = $2 AND status = \'pending\' RETURNING id',
+      [friendId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Remove friend or decline/cancel request
+app.delete('/api/friends/remove', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { friendId } = req.query;
+
+    await pool.query(
+      'DELETE FROM user_friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+      [userId, friendId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Block user
+app.post('/api/friends/block', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { friendId } = req.body;
+    
+    console.log(`User ${userId} blocking user ${friendId}`);
+
+    // Delete any existing relation first to avoid conflict and ensure correct requester_id
+    await pool.query(
+      'DELETE FROM user_friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+      [userId, friendId]
+    );
+
+    // Insert block status
+    await pool.query(`
+      INSERT INTO user_friends (user_id, friend_id, status)
+      VALUES ($1, $2, 'blocked')
+    `, [userId, friendId]);
+
+    // Delete chat history (messages)
+    await pool.query(
+      'DELETE FROM messages WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1)',
+      [userId, friendId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error blocking user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Unblock user
+app.delete('/api/friends/unblock', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { friendId } = req.query;
+
+    await pool.query(
+      'DELETE FROM user_friends WHERE user_id = $1 AND friend_id = $2 AND status = \'blocked\'',
+      [userId, friendId]
+    );
+
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -895,7 +1054,15 @@ app.get('/api/chats/personal', authenticateToken, async (req, res) => {
             ORDER BY m.created_at DESC
           ) as rn
         FROM messages m
-        WHERE (m.sender_id = $1 AND m.receiver_id IS NOT NULL) OR (m.receiver_id = $1)
+        WHERE ((m.sender_id = $1 AND m.receiver_id IS NOT NULL) OR (m.receiver_id = $1))
+          AND NOT EXISTS (
+            SELECT 1 FROM user_friends uf 
+            WHERE uf.status = 'blocked' 
+              AND (
+                (uf.user_id = m.sender_id AND uf.friend_id = m.receiver_id) OR
+                (uf.user_id = m.receiver_id AND uf.friend_id = m.sender_id)
+              )
+          )
       )
       SELECT 
         rm.id as message_id, 

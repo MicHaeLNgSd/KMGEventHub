@@ -32,7 +32,6 @@ export default function Header() {
         </Link>
       </div>
       <nav className="header-nav">
-        <Link to="/home">Домівка</Link>
         {!isModerator && (
           <>
             <Link to="/about">Про нас</Link>

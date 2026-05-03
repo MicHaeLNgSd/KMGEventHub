@@ -3,7 +3,8 @@ import clsx from 'clsx';
 import { 
   FaComments, FaUsers, FaCalendarAlt, FaSearch, 
   FaChevronRight, FaChevronLeft, FaPaperPlane,
-  FaUserCircle, FaInbox
+  FaUserCircle, FaInbox, FaUserPlus, FaUserMinus, 
+  FaBan, FaCheck, FaTimes, FaEllipsisV, FaUserFriends
 } from 'react-icons/fa';
 import { FiMessageSquare } from 'react-icons/fi';
 import { chatService } from '../services/chatService';
@@ -20,9 +21,22 @@ const ChatPanel = ({ currentUser }) => {
   const [personalChats, setPersonalChats] = useState([]);
   const [events, setEvents] = useState([]);
   const [people, setPeople] = useState([]);
+  const [friendRequests, setFriendRequests] = useState([]);
+  const [peopleFilter, setPeopleFilter] = useState('all'); // all, friends, banned
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   
+  const [confirmModal, setConfirmModal] = useState({
+    show: false,
+    title: '',
+    message: '',
+    confirmText: 'Підтвердити',
+    type: 'danger',
+    action: null,
+    targetId: null,
+    targetName: ''
+  });
+
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
@@ -61,7 +75,10 @@ const ChatPanel = ({ currentUser }) => {
         setEvents(uniqueEvents);
       } else if (activeTab === 'people') {
         const data = await chatService.getAllUsers();
-        setPeople(data.filter(p => p.id !== currentUser.id));
+        setPeople(data);
+      } else if (activeTab === 'requests') {
+        const data = await chatService.getFriendRequests();
+        setFriendRequests(data);
       }
     } catch (err) {
       console.error('Error loading chat data:', err);
@@ -125,6 +142,67 @@ const ChatPanel = ({ currentUser }) => {
     setNewMessage('');
   };
 
+  const handleConfirm = async () => {
+    const { action, targetId } = confirmModal;
+    try {
+      if (action === 'block') {
+        await chatService.blockUser(targetId);
+        if (activeChat?.id === targetId) {
+          setActiveChat(null);
+        }
+      } else if (action === 'remove') {
+        await chatService.removeFriend(targetId);
+      }
+      loadTabData();
+    } catch (err) {
+      console.error(`Error during ${action} confirmation:`, err);
+    }
+    setConfirmModal(prev => ({ ...prev, show: false }));
+  };
+
+  const handleFriendAction = async (action, friendId, friendName) => {
+    if (action === 'block') {
+      setConfirmModal({
+        show: true,
+        title: 'Заблокувати користувача?',
+        message: `Ви впевнені, що хочете заблокувати ${friendName}? Весь ваш спільний чат буде назавжди видалено.`,
+        confirmText: 'Заблокувати',
+        type: 'danger',
+        action: 'block',
+        targetId: friendId,
+        targetName: friendName
+      });
+      return;
+    }
+
+    if (action === 'remove') {
+      setConfirmModal({
+        show: true,
+        title: 'Видалити з друзів?',
+        message: `Ви впевнені, що хочете видалити ${friendName} зі списку друзів?`,
+        confirmText: 'Видалити',
+        type: 'warning',
+        action: 'remove',
+        targetId: friendId,
+        targetName: friendName
+      });
+      return;
+    }
+
+    try {
+      if (action === 'request') {
+        await chatService.sendFriendRequest(friendId);
+      } else if (action === 'accept') {
+        await chatService.acceptFriendRequest(friendId);
+      } else if (action === 'unblock') {
+        await chatService.unblockUser(friendId);
+      }
+      loadTabData();
+    } catch (err) {
+      console.error(`Error performing friend action (${action}):`, err);
+    }
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -140,13 +218,24 @@ const ChatPanel = ({ currentUser }) => {
     } else if (activeTab === 'events') {
       return events.filter(e => e.title.toLowerCase().includes(query));
     } else if (activeTab === 'people') {
-      return people.filter(p => 
-        p.full_name.toLowerCase().includes(query) || 
-        p.nickname.toLowerCase().includes(query)
+      return people.filter(p => {
+        const matchesQuery = p.full_name.toLowerCase().includes(query) || 
+                             p.nickname.toLowerCase().includes(query);
+        
+        if (peopleFilter === 'friends') return matchesQuery && p.friendship_status === 'accepted';
+        if (peopleFilter === 'banned') return matchesQuery && p.is_blocked_by_me;
+        
+        // In 'all', hide people who blocked me or who I blocked
+        return matchesQuery && p.friendship_status !== 'blocked';
+      });
+    } else if (activeTab === 'requests') {
+      return friendRequests.filter(r => 
+        r.full_name.toLowerCase().includes(query) || 
+        r.nickname.toLowerCase().includes(query)
       );
     }
     return [];
-  }, [activeTab, searchQuery, personalChats, events, people]);
+  }, [activeTab, searchQuery, personalChats, events, people, peopleFilter, friendRequests]);
 
   if (!currentUser) return null;
 
@@ -195,14 +284,39 @@ const ChatPanel = ({ currentUser }) => {
                 <FaUsers size={18} />
                 <span>Люди</span>
               </button>
+              <button 
+                className={clsx('chat-tab-btn', activeTab === 'requests' && 'active')}
+                onClick={() => setActiveTab('requests')}
+              >
+                <div className="tab-icon-wrapper">
+                  <FaUserFriends size={18} />
+                  {friendRequests.length > 0 && <div className="tab-badge">{friendRequests.length}</div>}
+                </div>
+                <span>Запити</span>
+              </button>
             </div>
 
             <div className="chat-list-area">
               {loading && <p className="notice">Завантаження...</p>}
+              
+              {activeTab === 'people' && (
+                <div className="people-filter-bar">
+                  <select 
+                    value={peopleFilter} 
+                    onChange={(e) => setPeopleFilter(e.target.value)}
+                    className="people-filter-select"
+                  >
+                    <option value="all">Усі люди</option>
+                    <option value="friends">Друзі</option>
+                    <option value="banned">Заблоковані</option>
+                  </select>
+                </div>
+              )}
+
               {!loading && filteredData.length === 0 && (
                 <div className="empty-chat-state">
                   <FaInbox size={40} />
-                  <p>Нічого не знайдено</p>
+                  <p>{activeTab === 'requests' ? 'Немає нових запитів' : 'Нічого не знайдено'}</p>
                 </div>
               )}
 
@@ -249,7 +363,7 @@ const ChatPanel = ({ currentUser }) => {
               ))}
 
               {activeTab === 'people' && filteredData.map(person => (
-                <div key={person.id} className="chat-item">
+                <div key={person.id} className="chat-item person-item">
                   <div className="chat-item-avatar" style={{ background: person.photo_url ? 'transparent' : '#10b981' }}>
                     {person.photo_url ? (
                       <img src={person.photo_url} alt={person.full_name} />
@@ -263,12 +377,68 @@ const ChatPanel = ({ currentUser }) => {
                     </div>
                     <div className="chat-item-last-msg">@{person.nickname}</div>
                   </div>
-                  <button 
-                    className="start-chat-btn"
-                    onClick={() => setActiveChat({ type: 'direct', id: person.id, name: person.full_name })}
-                  >
-                    <FiMessageSquare size={18} />
-                  </button>
+                  <div className="person-actions">
+                    {person.friendship_status === 'blocked' ? (
+                      <button className="action-btn unban-btn" onClick={() => handleFriendAction('unblock', person.id)} title="Розблокувати">
+                        <FaBan />
+                      </button>
+                    ) : (
+                      <>
+                        {person.friendship_status === 'accepted' ? (
+                          <button className="action-btn remove-btn" onClick={() => handleFriendAction('remove', person.id, person.full_name)} title="Видалити з друзів">
+                            <FaUserMinus />
+                          </button>
+                        ) : (
+                          person.friendship_status === 'pending' ? (
+                            person.requester_id === currentUser.id ? (
+                              <button className="action-btn cancel-btn" onClick={() => handleFriendAction('remove', person.id)} title="Скасувати запит">
+                                <FaTimes />
+                              </button>
+                            ) : null // Should be handled in requests tab, but let's keep it simple
+                          ) : (
+                            <button className="action-btn add-btn" onClick={() => handleFriendAction('request', person.id)} title="Додати в друзі">
+                              <FaUserPlus />
+                            </button>
+                          )
+                        )}
+                        <button className="action-btn msg-btn" onClick={() => setActiveChat({ type: 'direct', id: person.id, name: person.full_name })} title="Повідомлення">
+                          <FiMessageSquare />
+                        </button>
+                        <button className="action-btn block-btn" onClick={() => handleFriendAction('block', person.id, person.full_name)} title="Заблокувати">
+                          <FaBan />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {activeTab === 'requests' && filteredData.map(request => (
+                <div key={request.id} className="chat-item request-item">
+                  <div className="chat-item-avatar">
+                    {request.photo_url ? (
+                      <img src={request.photo_url} alt={request.full_name} />
+                    ) : (
+                      request.full_name.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div className="chat-item-info">
+                    <div className="chat-item-header">
+                      <span className="chat-item-name">{request.full_name}</span>
+                    </div>
+                    <div className="chat-item-last-msg">Запит у друзі</div>
+                  </div>
+                  <div className="request-actions">
+                    <button className="action-btn accept-btn" onClick={() => handleFriendAction('accept', request.id)} title="Прийняти">
+                      <FaCheck />
+                    </button>
+                    <button className="action-btn decline-btn" onClick={() => handleFriendAction('remove', request.id)} title="Відхилити">
+                      <FaTimes />
+                    </button>
+                    <button className="action-btn block-btn" onClick={() => handleFriendAction('block', request.id, request.full_name)} title="Заблокувати">
+                      <FaBan />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -339,6 +509,21 @@ const ChatPanel = ({ currentUser }) => {
           </div>
         )}
       </div>
+
+      {confirmModal.show && (
+        <div className="delete-confirm-modal" onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))}>
+          <div className="delete-confirm-content" onClick={e => e.stopPropagation()}>
+            <h3>{confirmModal.title}</h3>
+            <p>{confirmModal.message}</p>
+            <div className="delete-confirm-actions">
+              <button type="button" className="button button-secondary" onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))}>Скасувати</button>
+              <button type="button" className={clsx('button', confirmModal.type === 'danger' ? 'button-danger' : 'button-warning')} onClick={handleConfirm}>
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

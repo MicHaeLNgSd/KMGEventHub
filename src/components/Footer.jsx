@@ -25,7 +25,6 @@ export default function Footer() {
   return (
     <footer className="site-footer">
       <div className="footer-left">
-        <Link to="/home">Домівка</Link>
         {!isModerator && (
           <>
             <Link to="/about">Про нас</Link>

@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS user_friends (
   id SERIAL PRIMARY KEY,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   friend_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status VARCHAR(50) DEFAULT 'pending', -- pending, accepted
+  status VARCHAR(50) DEFAULT 'pending', -- pending, accepted, blocked
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(user_id, friend_id)
 );
@@ -116,4 +116,4 @@ CHECK (status IN ('pending', 'approved', 'rejected', 'left'));
 
 ALTER TABLE user_friends
 ADD CONSTRAINT check_friend_status
-CHECK (status IN ('pending', 'accepted'));
+CHECK (status IN ('pending', 'accepted', 'blocked'));

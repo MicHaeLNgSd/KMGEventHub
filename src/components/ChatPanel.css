@@ -415,3 +415,102 @@
   background: var(--accent-strong);
   transform: translateY(-2px);
 }
+.tab-icon-wrapper {
+  position: relative;
+}
+
+.tab-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #ef4444;
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 5px;
+  border-radius: 99px;
+  min-width: 16px;
+  border: 2px solid var(--surface);
+  font-weight: 700;
+}
+
+.people-filter-bar {
+  padding: 0 0 12px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  margin-bottom: 12px;
+}
+
+.people-filter-select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  font-size: 0.85rem;
+  color: var(--text);
+  outline: none;
+  cursor: pointer;
+}
+
+.people-filter-select:focus {
+  border-color: var(--accent);
+}
+
+.person-actions, .request-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.add-btn { background: var(--accent); color: white; }
+.add-btn:hover { background: var(--accent-strong); transform: scale(1.05); }
+
+.remove-btn { background: #fee2e2; color: #ef4444; }
+.remove-btn:hover { background: #fecaca; transform: scale(1.05); }
+
+.cancel-btn { background: #f3f4f6; color: var(--muted); }
+.cancel-btn:hover { background: #e5e7eb; transform: scale(1.05); }
+
+.msg-btn { background: #ecfdf5; color: #10b981; }
+.msg-btn:hover { background: #d1fae5; transform: scale(1.05); }
+
+.block-btn { background: #f3f4f6; color: #6b7280; }
+.block-btn:hover { background: #ef4444; color: white; transform: scale(1.05); }
+
+.unban-btn { background: #ef4444; color: white; }
+.unban-btn:hover { background: #dc2626; transform: scale(1.05); }
+
+.accept-btn { background: #10b981; color: white; }
+.accept-btn:hover { background: #059669; transform: scale(1.05); }
+
+.decline-btn { background: #fee2e2; color: #ef4444; }
+.decline-btn:hover { background: #fecaca; transform: scale(1.05); }
+
+.chat-item.person-item, .chat-item.request-item {
+  justify-content: space-between;
+}
+
+/* Ensure modal inside chat panel is clickable and on top */
+.chat-panel-container .delete-confirm-modal {
+  pointer-events: auto;
+  z-index: 3000;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
