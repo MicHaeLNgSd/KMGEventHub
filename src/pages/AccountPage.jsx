@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import clsx from 'clsx'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import avatarPlaceholder from '../assets/avatar-placeholder.svg'
@@ -172,7 +173,7 @@ export default function AccountPage() {
               </div>
               <div 
                 title={user?.is_active ? 'Активний' : 'Неактивний'}
-                className={`profile-status-indicator ${user?.is_active ? 'profile-status-active' : 'profile-status-inactive'}`}
+                className={clsx('profile-status-indicator', user?.is_active ? 'profile-status-active' : 'profile-status-inactive')}
               />
             </div>
             <div className="profile-details">

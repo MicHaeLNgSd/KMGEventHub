@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import clsx from 'clsx';
+import { FaArrowUp } from 'react-icons/fa';
 import './ScrollToTop.css';
 
 const ScrollToTop = () => {
@@ -36,14 +38,11 @@ const ScrollToTop = () => {
   return (
     <div className="scroll-to-top-wrapper">
       <div 
-        className={`scroll-to-top ${isVisible ? 'visible' : ''}`} 
+        className={clsx('scroll-to-top', isVisible && 'visible')} 
         onClick={scrollToTop}
       >
         <div className="arrow-icon">
-          <svg viewBox="0 0 24 24">
-            <line x1="12" y1="19" x2="12" y2="5"></line>
-            <polyline points="5 12 12 5 19 12"></polyline>
-          </svg>
+          <FaArrowUp size={20} />
         </div>
       </div>
     </div>

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import clsx from 'clsx';
+import { FaPaperPlane, FaTrash, FaUsers, FaBookOpen } from 'react-icons/fa';
 import { eventService } from '../services/eventService';
 import { socketService } from '../services/socketService';
 import { EVENT_CATEGORIES } from '../utils/categories';
@@ -95,14 +97,14 @@ export default function EventFormPanel({
           <div className="event-tabs">
             <button 
               type="button" 
-              className={`event-tab-btn ${activeTab === 'details' ? 'active' : ''}`}
+              className={clsx('event-tab-btn', activeTab === 'details' && 'active')}
               onClick={() => setActiveTab('details')}
             >
               Деталі
             </button>
             <button 
               type="button" 
-              className={`event-tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
+              className={clsx('event-tab-btn', activeTab === 'chat' && 'active')}
               onClick={() => setActiveTab('chat')}
             >
               Чат
@@ -114,7 +116,7 @@ export default function EventFormPanel({
           <form onSubmit={handleCreateEvent} className="create-event-form event-form-scrollable">
             {isEditMode && !hasEventAccess && (
               <div className="event-view-notice">
-                📖 Ви можете лише переглядати цей захід
+                <FaBookOpen className="icon-mr" /> Ви можете лише переглядати цей захід
               </div>
             )}
 
@@ -189,7 +191,7 @@ export default function EventFormPanel({
 
               {isEditMode && (selectedEvent?.creator_id === currentUser?.id || isModerator) && (
                 <button type="button" className="button button-danger" onClick={() => setShowDeleteConfirm(true)} title="Видалити захід">
-                  🗑️
+                  <FaTrash />
                 </button>
               )}
 
@@ -220,7 +222,7 @@ export default function EventFormPanel({
               className="chat-header-bar" 
               onClick={() => setShowParticipants(!showParticipants)}
             >
-              👥 Учасників: {participants.length} / {selectedEvent.max_participants || '∞'} 
+              <FaUsers className="icon-mr" /> Учасників: {participants.length} / {selectedEvent.max_participants || '∞'} 
               <span className="chat-header-subtitle">
                 {showParticipants ? '▲ Сховати перелік' : '▼ Показати перелік'}
               </span>
@@ -261,12 +263,12 @@ export default function EventFormPanel({
                 messages.map(msg => {
                   const isMine = msg.sender_id === currentUser?.id;
                   return (
-                    <div key={msg.id} className={`chat-message-wrapper ${isMine ? 'chat-message-mine' : 'chat-message-theirs'}`}>
+                    <div key={msg.id} className={clsx('chat-message-wrapper', isMine ? 'chat-message-mine' : 'chat-message-theirs')}>
                       {!isMine && <div className="chat-message-sender">{msg.sender_name}</div>}
-                      <div className={`chat-message-bubble ${isMine ? 'mine' : 'theirs'}`}>
+                      <div className={clsx('chat-message-bubble', isMine ? 'mine' : 'theirs')}>
                         {msg.text}
                       </div>
-                      <div className={`chat-message-time ${isMine ? 'mine' : ''}`}>
+                      <div className={clsx('chat-message-time', isMine && 'mine')}>
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
@@ -286,10 +288,7 @@ export default function EventFormPanel({
                   className="chat-input-field"
                 />
                 <button type="submit" className="button button-primary chat-send-btn">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                  </svg>
+                  <FaPaperPlane />
                 </button>
               </form>
             ) : (

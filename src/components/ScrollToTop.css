@@ -33,15 +33,7 @@
   pointer-events: auto;
 }
 
-.scroll-to-top svg {
-  width: 24px;
-  height: 24px;
-  stroke: currentColor;
-  stroke-width: 2.5px;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
+
 
 .scroll-to-top.visible {
   opacity: 1;

@@ -462,6 +462,11 @@
   margin-top: 10px;
 }
 
+.icon-mr {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 /* Side Panel for Creating Events */
 .create-event-panel {
   position: relative;

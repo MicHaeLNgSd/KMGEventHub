@@ -1,4 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
+import clsx from 'clsx'
+import { FaUserFriends, FaCalendarAlt, FaHourglassHalf, FaExclamationTriangle } from 'react-icons/fa'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import TopBar from '../components/TopBar'
@@ -298,10 +300,10 @@ export default function HomePage() {
   }
 
   return (
-    <div className={`page-shell ${showCreatePanel ? 'with-panel' : ''}`}>
+    <div className={clsx('page-shell', showCreatePanel && 'with-panel')}>
       <Header />
 
-      <main className={`app-shell ${showCreatePanel ? 'with-panel' : ''}`}>
+      <main className={clsx('app-shell', showCreatePanel && 'with-panel')}>
         <div className="page-card">
           <TopBar />
           <div className="search-bar">
@@ -349,7 +351,7 @@ export default function HomePage() {
             </select>
             
             <div className="filter-input-wrapper">
-              <span className="filter-icon">👥</span>
+              <FaUserFriends className="filter-icon" />
               <input 
                 type="number" 
                 placeholder="Мін. учасників" 
@@ -361,7 +363,7 @@ export default function HomePage() {
             </div>
             
             <div className="filter-input-wrapper">
-              <span className="filter-icon">👥</span>
+              <FaUserFriends className="filter-icon" />
               <input 
                 type="number" 
                 placeholder="Макс. учасників" 
@@ -373,7 +375,7 @@ export default function HomePage() {
             </div>
             
             <div className="filter-input-wrapper">
-              <span className="filter-icon">📅</span>
+              <FaCalendarAlt className="filter-icon" />
               <input 
                 type="date" 
                 value={filterDate} 
@@ -404,11 +406,11 @@ export default function HomePage() {
             </div>
           </div>
 
-        {loading && <p className="notice">⏳ Завантаження подій...</p>}
+        {loading && <p className="notice"><FaHourglassHalf className="icon-mr" /> Завантаження подій...</p>}
 
         {error && (
           <p className="notice">
-            ⚠️ Помилка підключення до сервера ({error}). Показуються кешовані дані.
+            <FaExclamationTriangle className="icon-mr" /> Помилка підключення до сервера ({error}). Показуються кешовані дані.
           </p>
         )}
 
@@ -434,7 +436,7 @@ export default function HomePage() {
               {[...Array(totalPages)].map((_, i) => (
                 <button 
                   key={i + 1}
-                  className={`pagination-page-btn ${currentPage === i + 1 ? 'active' : ''}`}
+                  className={clsx('pagination-page-btn', currentPage === i + 1 && 'active')}
                   onClick={() => setCurrentPage(i + 1)}
                 >
                   {i + 1}
