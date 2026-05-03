@@ -13,6 +13,75 @@
   display: inline-block;
 }
 
+.profile-avatar-block {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  border-radius: 40px;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  border: 4px solid var(--surface);
+  background: var(--surface);
+}
+
+.profile-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.profile-avatar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  cursor: pointer;
+}
+
+.profile-avatar-block:hover .profile-avatar-overlay {
+  opacity: 1;
+}
+
+.profile-avatar-block:hover .profile-avatar {
+  transform: scale(1.1);
+}
+
+.avatar-edit-icon, .avatar-delete-icon {
+  background: white;
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.avatar-edit-icon:hover {
+  background: var(--accent);
+  color: white;
+  transform: scale(1.1);
+}
+
+.avatar-delete-icon:hover {
+  background: var(--danger);
+  color: white;
+  transform: scale(1.1);
+}
+
 .profile-status-indicator {
   position: absolute;
   bottom: 6px;

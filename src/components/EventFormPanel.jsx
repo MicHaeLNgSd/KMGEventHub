@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { FaPaperPlane, FaTrash, FaUsers, FaBookOpen } from 'react-icons/fa';
+import { FaPaperPlane, FaTrash, FaUsers, FaBookOpen, FaPencilAlt, FaCalendarAlt } from 'react-icons/fa';
+import API from '../utils/api';
 import { eventService } from '../services/eventService';
 import { socketService } from '../services/socketService';
 import { EVENT_CATEGORIES } from '../utils/categories';
@@ -85,6 +86,31 @@ export default function EventFormPanel({
     return 0;
   });
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formDataUpload = new FormData();
+    formDataUpload.append('image', file);
+
+    try {
+      const uploadRes = await API.post('/upload', formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      const imageUrl = uploadRes.data.imageUrl;
+      const fullUrl = `${API.defaults.baseURL.replace('/api', '')}${imageUrl}`;
+
+      handleFormChange({ target: { name: 'photo_url', value: fullUrl } });
+    } catch (err) {
+      console.error('Event photo upload error:', err);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    handleFormChange({ target: { name: 'photo_url', value: null } });
+  };
+
   return (
     <>
       <aside className="create-event-panel event-panel-container">
@@ -116,7 +142,16 @@ export default function EventFormPanel({
           <form onSubmit={handleCreateEvent} className="create-event-form event-form-scrollable">
             {isEditMode && !hasEventAccess && (
               <div className="event-view-notice">
-                <FaBookOpen className="icon-mr" /> Ви можете лише переглядати цей захід
+                <div className="notice-photo">
+                  {formData.photo_url ? (
+                    <img src={formData.photo_url} alt="Event" />
+                  ) : (
+                    <FaCalendarAlt size={16} />
+                  )}
+                </div>
+                <div>
+                  <FaBookOpen className="icon-mr" /> Ви можете лише переглядати цей захід
+                </div>
               </div>
             )}
 
@@ -125,6 +160,39 @@ export default function EventFormPanel({
                 <p>❌ {formError}</p>
               </div>
             )}
+
+            <div className="form-group event-photo-setup">
+              <label>Фото заходу</label>
+              <div className="event-photo-preview-container">
+                <div className="event-photo-preview">
+                  {formData.photo_url ? (
+                    <img src={formData.photo_url} alt="Preview" />
+                  ) : (
+                    <FaCalendarAlt size={40} />
+                  )}
+                  {(!isEditMode || hasEventAccess) && (
+                    <div className="event-photo-overlay">
+                      <label htmlFor="event-photo-upload" className="photo-edit-btn" title="Змінити фото">
+                        <FaPencilAlt />
+                      </label>
+                      {formData.photo_url && (
+                        <button type="button" className="photo-delete-btn" onClick={handleRemovePhoto} title="Видалити фото">
+                          <FaTrash />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <input 
+                  id="event-photo-upload" 
+                  type="file" 
+                  accept="image/*" 
+                  style={{ display: 'none' }} 
+                  onChange={handlePhotoUpload} 
+                  disabled={isEditMode && !hasEventAccess}
+                />
+              </div>
+            </div>
 
             <div className="form-group">
               <label htmlFor="title">Назва заходу *</label>
@@ -222,7 +290,16 @@ export default function EventFormPanel({
               className="chat-header-bar" 
               onClick={() => setShowParticipants(!showParticipants)}
             >
-              <FaUsers className="icon-mr" /> Учасників: {participants.length} / {selectedEvent.max_participants || '∞'} 
+              <div className="chat-header-info">
+                <div className="chat-header-avatar">
+                  {selectedEvent.photo_url ? (
+                    <img src={selectedEvent.photo_url} alt="Event" />
+                  ) : (
+                    <FaCalendarAlt size={16} />
+                  )}
+                </div>
+                <span><FaUsers className="icon-mr" /> Учасників: {participants.length} / {selectedEvent.max_participants || '∞'}</span>
+              </div>
               <span className="chat-header-subtitle">
                 {showParticipants ? '▲ Сховати перелік' : '▼ Показати перелік'}
               </span>
@@ -234,7 +311,11 @@ export default function EventFormPanel({
                   {sortedParticipants.map(p => (
                     <li key={p.id} className="participant-item">
                       <div className="participant-avatar">
-                        {p.full_name.charAt(0).toUpperCase()}
+                        {p.photo_url ? (
+                          <img src={p.photo_url} alt={p.full_name} className="participant-photo" />
+                        ) : (
+                          p.full_name.charAt(0).toUpperCase()
+                        )}
                       </div>
                       <div className="participant-info">
                         <div className="participant-name">{p.full_name}</div>
@@ -264,12 +345,23 @@ export default function EventFormPanel({
                   const isMine = msg.sender_id === currentUser?.id;
                   return (
                     <div key={msg.id} className={clsx('chat-message-wrapper', isMine ? 'chat-message-mine' : 'chat-message-theirs')}>
-                      {!isMine && <div className="chat-message-sender">{msg.sender_name}</div>}
-                      <div className={clsx('chat-message-bubble', isMine ? 'mine' : 'theirs')}>
-                        {msg.text}
-                      </div>
-                      <div className={clsx('chat-message-time', isMine && 'mine')}>
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {!isMine && (
+                        <div className="chat-message-sender-avatar">
+                          {msg.sender_photo ? (
+                            <img src={msg.sender_photo} alt={msg.sender_name} />
+                          ) : (
+                            <div className="avatar-placeholder">{msg.sender_name.charAt(0).toUpperCase()}</div>
+                          )}
+                        </div>
+                      )}
+                      <div className="chat-message-content">
+                        {!isMine && <div className="chat-message-sender">{msg.sender_name}</div>}
+                        <div className={clsx('chat-message-bubble', isMine ? 'mine' : 'theirs')}>
+                          {msg.text}
+                        </div>
+                        <div className={clsx('chat-message-time', isMine && 'mine')}>
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
                       </div>
                     </div>
                   );

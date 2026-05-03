@@ -4,6 +4,9 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import pool from './db/config.js';
 import { generateToken, verifyToken } from './config/jwt.js';
 
@@ -20,6 +23,13 @@ const app = express();
 const PORT = process.env.SERVER_PORT || 3000;
 const httpServer = createServer(app);
 
+const __dirname = path.resolve();
+const uploadDir = path.join(__dirname, 'uploads');
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
 // Setup Socket.io
 const io = new Server(httpServer, {
   cors: {
@@ -31,6 +41,32 @@ const io = new Server(httpServer, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(uploadDir));
+
+// Multer storage configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const filetypes = /jpeg|jpg|png|gif|webp/;
+    const mimetype = filetypes.test(file.mimetype);
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    if (mimetype && extname) {
+      return cb(null, true);
+    }
+    cb(new Error('Only images (jpeg, jpg, png, gif, webp) are allowed'));
+  }
+});
 
 // Socket.io Authentication Middleware
 io.use((socket, next) => {
@@ -84,7 +120,7 @@ io.on('connection', (socket) => {
       );
 
       const message = result.rows[0];
-      const userResult = await pool.query('SELECT id, full_name, nickname FROM users WHERE id = $1', [senderId]);
+      const userResult = await pool.query('SELECT id, full_name, nickname, photo_url FROM users WHERE id = $1', [senderId]);
       const sender = userResult.rows[0];
 
       const newMessage = {
@@ -93,7 +129,8 @@ io.on('connection', (socket) => {
         created_at: message.created_at,
         sender_id: sender.id,
         sender_name: sender.full_name,
-        sender_nickname: sender.nickname
+        sender_nickname: sender.nickname,
+        sender_photo: sender.photo_url
       };
 
       io.to(`event_${eventId}`).emit('newMessage', newMessage);
@@ -132,7 +169,7 @@ io.on('connection', (socket) => {
       );
 
       const message = result.rows[0];
-      const userResult = await pool.query('SELECT id, full_name, nickname FROM users WHERE id = $1', [senderId]);
+      const userResult = await pool.query('SELECT id, full_name, nickname, photo_url FROM users WHERE id = $1', [senderId]);
       const sender = userResult.rows[0];
 
       const newMessage = {
@@ -142,7 +179,8 @@ io.on('connection', (socket) => {
         sender_id: sender.id,
         receiver_id: receiverId,
         sender_name: sender.full_name,
-        sender_nickname: sender.nickname
+        sender_nickname: sender.nickname,
+        sender_photo: sender.photo_url
       };
 
       const minId = Math.min(senderId, parseInt(receiverId, 10));
@@ -196,10 +234,23 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// Generic Upload endpoint
+app.post('/api/upload', authenticateToken, upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const imageUrl = `/uploads/${req.file.filename}`;
+    res.json({ imageUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all users
 app.get('/api/users', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, full_name, nickname, age, email FROM users ORDER BY created_at DESC');
+    const result = await pool.query('SELECT id, full_name, nickname, age, email, photo_url FROM users ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -241,7 +292,7 @@ app.post('/api/users/offline', async (req, res) => {
 app.get('/api/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('SELECT id, phone_number, full_name, nickname, age, email, bio, is_active, created_at, updated_at FROM users WHERE id = $1', [id]);
+    const result = await pool.query('SELECT id, phone_number, full_name, nickname, age, email, bio, photo_url, is_active, created_at, updated_at FROM users WHERE id = $1', [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -280,6 +331,7 @@ app.get('/api/events', async (req, res) => {
         e.event_date,
         e.max_participants,
         e.category,
+        e.photo_url,
         u.id as creator_id,
         u.full_name as creator_name,
         u.nickname as creator_nickname,
@@ -397,7 +449,7 @@ app.get('/api/events/:id', async (req, res) => {
 
     // Get participants
     const participantsResult = await pool.query(`
-      SELECT u.id, u.full_name, u.nickname, u.age, ep.status
+      SELECT u.id, u.full_name, u.nickname, u.age, u.photo_url, ep.status
       FROM event_participants ep
       LEFT JOIN users u ON ep.user_id = u.id
       WHERE ep.event_id = $1
@@ -552,7 +604,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const userResult = await pool.query('SELECT id, full_name, nickname, role FROM users WHERE id = $1', [req.user.id]);
+    const userResult = await pool.query('SELECT id, full_name, nickname, role, photo_url FROM users WHERE id = $1', [req.user.id]);
     if (userResult.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -565,7 +617,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 app.put('/api/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { full_name, nickname, email, age, phone_number, bio } = req.body;
+    const { full_name, nickname, email, age, phone_number, bio, photo_url } = req.body;
 
     const trimmedName = full_name?.trim();
     const trimmedNickname = nickname?.trim();
@@ -603,10 +655,11 @@ app.put('/api/users/:id', async (req, res) => {
            phone_number = $4,
            email = $5,
            bio = $6,
+           photo_url = $7,
            updated_at = NOW()
-       WHERE id = $7
-       RETURNING id, full_name, nickname, age, email, phone_number, bio, is_active, created_at, updated_at`,
-      [trimmedName, trimmedNickname, parsedAge, trimmedPhone || null, trimmedEmail, trimmedBio || null, id]
+       WHERE id = $8
+       RETURNING id, full_name, nickname, age, email, phone_number, bio, photo_url, is_active, created_at, updated_at`,
+      [trimmedName, trimmedNickname, parsedAge, trimmedPhone || null, trimmedEmail, trimmedBio || null, photo_url || null, id]
     );
 
     if (result.rows.length === 0) {
@@ -623,7 +676,7 @@ app.put('/api/users/:id', async (req, res) => {
 // Create new event
 app.post('/api/events', authenticateToken, async (req, res) => {
   try {
-    const { title, description, location, latitude, longitude, event_date, max_participants, is_private, category } = req.body;
+    const { title, description, location, latitude, longitude, event_date, max_participants, is_private, category, photo_url } = req.body;
     const creator_id = req.user.id;
 
     // Validation
@@ -634,10 +687,10 @@ app.post('/api/events', authenticateToken, async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO events (creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id, creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category, status, created_at`,
-      [creator_id, title, description || null, location, latitude || null, longitude || null, event_date, max_participants || null, is_private || false, category || null]
+      `INSERT INTO events (creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category, photo_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id, creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category, photo_url, status, created_at`,
+      [creator_id, title, description || null, location, latitude || null, longitude || null, event_date, max_participants || null, is_private || false, category || null, photo_url || null]
     );
 
     const newEvent = result.rows[0];
@@ -652,7 +705,7 @@ app.post('/api/events', authenticateToken, async (req, res) => {
 app.put('/api/events/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, location, latitude, longitude, event_date, max_participants, is_private, category } = req.body;
+    const { title, description, location, latitude, longitude, event_date, max_participants, is_private, category, photo_url } = req.body;
 
     // Check if user has permission to edit
     const eventResult = await pool.query('SELECT creator_id FROM events WHERE id = $1', [id]);
@@ -681,10 +734,11 @@ app.put('/api/events/:id', authenticateToken, async (req, res) => {
            max_participants = $7,
            is_private = $8,
            category = $9,
+           photo_url = $10,
            updated_at = NOW()
-       WHERE id = $10
-       RETURNING id, creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category, status, created_at, updated_at`,
-      [title, description || null, location, latitude || null, longitude || null, event_date, max_participants || null, is_private || false, category || null, id]
+       WHERE id = $11
+       RETURNING id, creator_id, title, description, location, latitude, longitude, event_date, max_participants, is_private, category, photo_url, status, created_at, updated_at`,
+      [title, description || null, location, latitude || null, longitude || null, event_date, max_participants || null, is_private || false, category || null, photo_url || null, id]
     );
 
     if (result.rows.length === 0) {
@@ -771,7 +825,7 @@ app.get('/api/events/:id/messages', authenticateToken, async (req, res) => {
     const { id } = req.params;
     
     const result = await pool.query(`
-      SELECT m.id, m.text, m.created_at, u.id as sender_id, u.full_name as sender_name, u.nickname as sender_nickname
+      SELECT m.id, m.text, m.created_at, u.id as sender_id, u.full_name as sender_name, u.nickname as sender_nickname, u.photo_url as sender_photo
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE m.event_id = $1
@@ -804,7 +858,7 @@ app.post('/api/events/:id/messages', authenticateToken, async (req, res) => {
     );
 
     const message = result.rows[0];
-    const userResult = await pool.query('SELECT id, full_name, nickname FROM users WHERE id = $1', [sender_id]);
+    const userResult = await pool.query('SELECT id, full_name, nickname, photo_url FROM users WHERE id = $1', [sender_id]);
     const sender = userResult.rows[0];
 
     res.status(201).json({
@@ -813,7 +867,8 @@ app.post('/api/events/:id/messages', authenticateToken, async (req, res) => {
       created_at: message.created_at,
       sender_id: sender.id,
       sender_name: sender.full_name,
-      sender_nickname: sender.nickname
+      sender_nickname: sender.nickname,
+      sender_photo: sender.photo_url
     });
   } catch (error) {
     console.error('Error sending message:', error);
@@ -850,6 +905,7 @@ app.get('/api/chats/personal', authenticateToken, async (req, res) => {
         u.id as friend_id, 
         u.full_name as friend_name, 
         u.nickname as friend_nickname,
+        u.photo_url as friend_photo,
         u.is_active as is_online
       FROM RankedMessages rm
       JOIN users u ON rm.partner_id = u.id
@@ -871,7 +927,7 @@ app.get('/api/messages/direct/:friendId', authenticateToken, async (req, res) =>
     const { friendId } = req.params;
     
     const result = await pool.query(`
-      SELECT m.id, m.text, m.created_at, m.receiver_id, u.id as sender_id, u.full_name as sender_name, u.nickname as sender_nickname
+      SELECT m.id, m.text, m.created_at, m.receiver_id, u.id as sender_id, u.full_name as sender_name, u.nickname as sender_nickname, u.photo_url as sender_photo
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE (m.sender_id = $1 AND m.receiver_id = $2) OR (m.sender_id = $2 AND m.receiver_id = $1)

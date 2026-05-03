@@ -39,6 +39,7 @@ export default function HomePage() {
     max_participants: '',
     is_private: false,
     category: '',
+    photo_url: null,
   })
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -71,13 +72,13 @@ export default function HomePage() {
     return dbEvents.map((event) => ({
       id: event.id,
       title: event.title,
-      date: event.event_date ? new Date(event.event_date).toLocaleDateString('uk-UA') : '',
-      event_date_raw: event.event_date,
+      event_date: event.event_date,
       location: event.location,
       description: event.description,
       participants: event.participant_count || 0,
       max_participants: event.max_participants,
       category: event.category,
+      photo_url: event.photo_url,
       creator_id: event.creator_id,
       participant_ids: Array.isArray(event.participant_ids) ? event.participant_ids : [],
     }))
@@ -167,6 +168,7 @@ export default function HomePage() {
         max_participants: eventData.max_participants || '',
         is_private: eventData.is_private || false,
         category: eventData.category || '',
+        photo_url: eventData.photo_url || null,
       })
       
       setShowCreatePanel(true)
@@ -254,6 +256,7 @@ export default function HomePage() {
         max_participants: formData.max_participants ? parseInt(formData.max_participants) : null,
         is_private: formData.is_private,
         category: formData.category,
+        photo_url: formData.photo_url,
       }
 
       if (!isEditMode) {
@@ -278,6 +281,7 @@ export default function HomePage() {
         max_participants: '',
         is_private: false,
         category: '',
+        photo_url: null,
       })
     } catch (err) {
       console.error(`Помилка при ${selectedEvent ? 'редагуванні' : 'створенні'} заходу:`, err)
@@ -329,6 +333,7 @@ export default function HomePage() {
                     max_participants: '',
                     is_private: false,
                     category: '',
+                    photo_url: null,
                   })
                   setShowCreatePanel(true)
                 }}

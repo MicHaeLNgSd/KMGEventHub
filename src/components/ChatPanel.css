@@ -189,6 +189,13 @@
   font-size: 1.1rem;
   position: relative;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.chat-item-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .chat-item-status {
@@ -200,6 +207,7 @@
   border-radius: 50%;
   background: #10b981;
   border: 2px solid white;
+  z-index: 2;
 }
 
 .chat-item-info {
@@ -251,6 +259,11 @@
   gap: 12px;
 }
 
+.active-chat-header .chat-item-avatar {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
 .back-btn {
   padding: 8px;
   border: none;
@@ -274,6 +287,55 @@
   display: flex;
   flex-direction: column;
   gap: 15px;
+}
+
+.chat-message-wrapper {
+  display: flex;
+  gap: 10px;
+  max-width: 85%;
+}
+
+.chat-message-mine {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.chat-message-theirs {
+  align-self: flex-start;
+}
+
+.chat-message-sender-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.chat-message-sender-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chat-message-sender-avatar .avatar-placeholder {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.chat-message-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-message-mine .chat-message-content {
+  align-items: flex-end;
 }
 
 .active-chat-input {

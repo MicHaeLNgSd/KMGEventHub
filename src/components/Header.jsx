@@ -39,7 +39,14 @@ export default function Header() {
             <Link to="/contacts">Контакти</Link>
           </>
         )}
-        <Link to="/account">Аккаунт</Link>
+        <Link to="/account" className="header-account-link">
+          {user?.photo_url ? (
+            <img src={user.photo_url} alt="Profile" className="header-avatar" />
+          ) : (
+            <span className="header-avatar-placeholder">{user?.full_name?.charAt(0).toUpperCase() || 'U'}</span>
+          )}
+          Аккаунт
+        </Link>
       </nav>
     </header>
   )

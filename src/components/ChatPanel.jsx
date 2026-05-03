@@ -209,7 +209,11 @@ const ChatPanel = ({ currentUser }) => {
               {activeTab === 'personal' && filteredData.map(chat => (
                 <div key={chat.friend_id} className="chat-item" onClick={() => setActiveChat({ type: 'direct', id: chat.friend_id, name: chat.friend_name })}>
                   <div className="chat-item-avatar">
-                    {chat.friend_name.charAt(0).toUpperCase()}
+                    {chat.friend_photo ? (
+                      <img src={chat.friend_photo} alt={chat.friend_name} />
+                    ) : (
+                      chat.friend_name.charAt(0).toUpperCase()
+                    )}
                     {chat.is_online && <div className="chat-item-status" />}
                   </div>
                   <div className="chat-item-info">
@@ -228,8 +232,12 @@ const ChatPanel = ({ currentUser }) => {
 
               {activeTab === 'events' && filteredData.map(event => (
                 <div key={event.id} className="chat-item" onClick={() => setActiveChat({ type: 'event', id: event.id, name: event.title })}>
-                  <div className="chat-item-avatar" style={{ background: '#f59e0b' }}>
-                    <FaCalendarAlt size={20} />
+                  <div className="chat-item-avatar" style={{ background: event.photo_url ? 'transparent' : '#f59e0b' }}>
+                    {event.photo_url ? (
+                      <img src={event.photo_url} alt={event.title} />
+                    ) : (
+                      <FaCalendarAlt size={20} />
+                    )}
                   </div>
                   <div className="chat-item-info">
                     <div className="chat-item-header">
@@ -242,8 +250,12 @@ const ChatPanel = ({ currentUser }) => {
 
               {activeTab === 'people' && filteredData.map(person => (
                 <div key={person.id} className="chat-item">
-                  <div className="chat-item-avatar" style={{ background: '#10b981' }}>
-                    {person.full_name.charAt(0).toUpperCase()}
+                  <div className="chat-item-avatar" style={{ background: person.photo_url ? 'transparent' : '#10b981' }}>
+                    {person.photo_url ? (
+                      <img src={person.photo_url} alt={person.full_name} />
+                    ) : (
+                      person.full_name.charAt(0).toUpperCase()
+                    )}
                   </div>
                   <div className="chat-item-info">
                     <div className="chat-item-header">
@@ -267,8 +279,12 @@ const ChatPanel = ({ currentUser }) => {
               <button className="back-btn" onClick={() => setActiveChat(null)}>
                 <FaChevronLeft size={18} />
               </button>
-              <div className="chat-item-avatar" style={{ width: 36, height: 36, fontSize: '0.9rem', background: activeChat.type === 'event' ? '#f59e0b' : '#6366f1' }}>
-                {activeChat.type === 'event' ? <FaCalendarAlt size={16} /> : activeChat.name.charAt(0).toUpperCase()}
+              <div className="chat-item-avatar" style={{ width: 36, height: 36, fontSize: '0.9rem', background: activeChat.type === 'event' ? (activeChat.photo_url ? 'transparent' : '#f59e0b') : (activeChat.photo_url ? 'transparent' : '#6366f1') }}>
+                {activeChat.type === 'event' ? (
+                  activeChat.photo_url ? <img src={activeChat.photo_url} alt={activeChat.name} /> : <FaCalendarAlt size={16} />
+                ) : (
+                  activeChat.photo_url ? <img src={activeChat.photo_url} alt={activeChat.name} /> : activeChat.name.charAt(0).toUpperCase()
+                )}
               </div>
               <div className="chat-item-name">{activeChat.name}</div>
             </div>
@@ -284,12 +300,23 @@ const ChatPanel = ({ currentUser }) => {
                 const isMine = msg.sender_id === currentUser.id;
                 return (
                   <div key={msg.id || i} className={clsx('chat-message-wrapper', isMine ? 'chat-message-mine' : 'chat-message-theirs')}>
-                    {!isMine && <div className="chat-message-sender">{msg.sender_name}</div>}
-                    <div className={clsx('chat-message-bubble', isMine ? 'mine' : 'theirs')}>
-                      {msg.text}
-                    </div>
-                    <div className={clsx('chat-message-time', isMine && 'mine')}>
-                      {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {!isMine && (
+                      <div className="chat-message-sender-avatar">
+                        {msg.sender_photo ? (
+                          <img src={msg.sender_photo} alt={msg.sender_name} />
+                        ) : (
+                          <div className="avatar-placeholder">{msg.sender_name.charAt(0).toUpperCase()}</div>
+                        )}
+                      </div>
+                    )}
+                    <div className="chat-message-content">
+                      {!isMine && <div className="chat-message-sender">{msg.sender_name}</div>}
+                      <div className={clsx('chat-message-bubble', isMine ? 'mine' : 'theirs')}>
+                        {msg.text}
+                      </div>
+                      <div className={clsx('chat-message-time', isMine && 'mine')}>
+                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
                   </div>
                 );

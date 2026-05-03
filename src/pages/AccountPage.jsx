@@ -8,6 +8,7 @@ import API from '../utils/api'
 import { authService } from '../services/authService'
 import { validateAge, validatePhone } from '../utils/validators'
 import { formatPhoneInput } from '../utils/formatters'
+import { FaPencilAlt, FaTrash } from 'react-icons/fa'
 import './AccountPage.css'
 
 export default function AccountPage() {
@@ -129,7 +130,8 @@ export default function AccountPage() {
         email: form.email.trim().toLowerCase(),
         age: trimmedAge || null,
         phone_number: trimmedPhone || null,
-        bio: form.bio.trim() || null
+        bio: form.bio.trim() || null,
+        photo_url: user.photo_url
       })
 
       setUser(response.data.user)
@@ -138,6 +140,54 @@ export default function AccountPage() {
     } catch (saveError) {
       console.error('Account save error:', saveError)
       setError(saveError.response?.data?.error || 'Помилка збереження профілю. Спробуйте пізніше.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append('image', file)
+
+    try {
+      setSaving(true)
+      const uploadRes = await API.post('/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      
+      const imageUrl = uploadRes.data.imageUrl
+      const fullUrl = `${API.defaults.baseURL.replace('/api', '')}${imageUrl}`
+
+      const response = await API.put(`/users/${user.id}`, {
+        ...form,
+        photo_url: fullUrl
+      })
+
+      setUser(response.data.user)
+      setMessage('Аватар успішно оновлено.')
+    } catch (err) {
+      console.error('Avatar upload error:', err)
+      setError('Не вдалося завантажити аватар.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemoveAvatar = async () => {
+    try {
+      setSaving(true)
+      const response = await API.put(`/users/${user.id}`, {
+        ...form,
+        photo_url: null
+      })
+      setUser(response.data.user)
+      setMessage('Аватар видалено.')
+    } catch (err) {
+      console.error('Avatar removal error:', err)
+      setError('Не вдалося видалити аватар.')
     } finally {
       setSaving(false)
     }
@@ -169,7 +219,33 @@ export default function AccountPage() {
           <div className="profile-header">
             <div className="profile-avatar-container">
               <div className="profile-avatar-block">
-                <img src={avatarPlaceholder} alt="Аватар" className="profile-avatar" />
+                <img 
+                  src={user?.photo_url || avatarPlaceholder} 
+                  alt="Аватар" 
+                  className="profile-avatar" 
+                />
+                <div className="profile-avatar-overlay">
+                  <label htmlFor="avatar-upload" className="avatar-edit-icon" title="Змінити фото">
+                    <FaPencilAlt />
+                  </label>
+                  {user?.photo_url && (
+                    <button 
+                      type="button" 
+                      className="avatar-delete-icon" 
+                      onClick={handleRemoveAvatar}
+                      title="Видалити фото"
+                    >
+                      <FaTrash />
+                    </button>
+                  )}
+                </div>
+                <input 
+                  id="avatar-upload" 
+                  type="file" 
+                  accept="image/*" 
+                  style={{ display: 'none' }} 
+                  onChange={handleAvatarUpload} 
+                />
               </div>
               <div 
                 title={user?.is_active ? 'Активний' : 'Неактивний'}
