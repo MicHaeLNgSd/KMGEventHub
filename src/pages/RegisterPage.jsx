@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authService } from '../services/authService'
 import { validateAge, validatePhone } from '../utils/validators'
+import { formatPhoneInput } from '../utils/formatters'
 
 export default function RegisterPage({ setUser }) {
   const [form, setForm] = useState({
     name: '',
     nickname: '',
     age: '',
-    phone: '',
+    phone: '+38',
     email: '',
     password: '',
     role: ''
@@ -17,12 +18,23 @@ export default function RegisterPage({ setUser }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const navigate = useNavigate()
 
+  const handleChangePhone = (event) => {
+    const { value } = event.target
+    const formattedPhone = formatPhoneInput(value)
+    setForm((prev) => ({ ...prev, phone: formattedPhone }))
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
 
     const trimmedPhone = form.phone.trim()
     const trimmedAge = form.age.trim()
+
+    if (!trimmedPhone || trimmedPhone === '+38') {
+      setError('Номер телефону є обов\'язковим.')
+      return
+    }
 
     const ageError = validateAge(trimmedAge)
     if (ageError) {
@@ -104,13 +116,14 @@ export default function RegisterPage({ setUser }) {
             />
           </div>
           <div className="form-field">
-            <label htmlFor="phone">Телефон (необов'язково)</label>
+            <label htmlFor="phone">Телефон</label>
             <input
               id="phone"
               type="tel"
               value={form.phone}
-              onChange={(event) => setForm({ ...form, phone: event.target.value })}
-              placeholder="380XXXXXXXXX"
+              onChange={handleChangePhone}
+              placeholder="+380XXXXXXXXX"
+              required
             />
           </div>
           <div className="form-field">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import clsx from 'clsx';
 import { 
   FaComments, FaUsers, FaCalendarAlt, FaSearch, 
@@ -43,136 +43,91 @@ const ChatPanel = ({ currentUser }) => {
 
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  const isModerator = currentUser?.role === 'MODERATOR';
 
-
-  // Initial Data Loading
-  useEffect(() => {
+  // Stable data loader
+  const loadTabData = useCallback(async (isSilent = false) => {
     if (!currentUser) return;
-    
-    if (isOpen) {
-      loadTabData();
-      socketService.connect();
-      socketService.joinPersonalRoom(currentUser.id);
-      
-      const refreshList = () => loadTabData();
-      socketService.onChatListUpdate(refreshList);
-
-      // Friendship events - refresh people/requests tabs
-      socketService.onFriendRequestReceived(refreshList);
-      socketService.onFriendRequestAccepted(refreshList);
-      socketService.onFriendRemoved(refreshList);
-      socketService.onUserBlocked(refreshList);
-      socketService.onUserUnblocked(refreshList);
-
-      // Kicked from event - refresh event list
-      socketService.onKickedFromEvent(refreshList);
-
-      // Event deleted - refresh events and close active chat if needed
-      const handleEventDeleted = (data) => {
-        if (activeChat?.type === 'event' && activeChat?.id === data.eventId) {
-          setActiveChat(null);
-        }
-        loadTabData();
-      };
-      socketService.onEventDeleted(handleEventDeleted);
-
-      // Message deleted in active chat
-      const handleMessageDeleted = (data) => {
-        setMessages(prev => prev.filter(m => m.id !== data.messageId));
-      };
-      socketService.onMessageDeleted(handleMessageDeleted);
-      
-      return () => {
-        socketService.offChatListUpdate(refreshList);
-        socketService.offFriendRequestReceived(refreshList);
-        socketService.offFriendRequestAccepted(refreshList);
-        socketService.offFriendRemoved(refreshList);
-        socketService.offUserBlocked(refreshList);
-        socketService.offUserUnblocked(refreshList);
-        socketService.offKickedFromEvent(refreshList);
-        socketService.offEventDeleted(handleEventDeleted);
-        socketService.offMessageDeleted(handleMessageDeleted);
-      };
-    }
-  }, [isOpen, activeTab, currentUser]);
-
-  const loadTabData = async () => {
-    setLoading(true);
+    if (!isSilent) setLoading(true);
     try {
+      // 1. Always fetch requests to keep the badge updated
+      const requestsData = await chatService.getFriendRequests();
+      setFriendRequests(requestsData);
+
+      // 2. Tab-specific data
       if (activeTab === 'personal') {
         const data = await chatService.getPersonalChats();
         setPersonalChats(data);
       } else if (activeTab === 'events') {
-        // Fetch events joined or created by user
         const response = await eventService.getEvents({ userId: currentUser.id, joinedEvents: true });
         const myResponse = await eventService.getEvents({ userId: currentUser.id, myEvents: true });
-        
-        // Merge and unique
         const allEvents = [...response.events, ...myResponse.events];
         const uniqueEvents = Array.from(new Map(allEvents.map(item => [item.id, item])).values());
         setEvents(uniqueEvents);
       } else if (activeTab === 'people') {
         const data = await chatService.getAllUsers();
         setPeople(data);
-      } else if (activeTab === 'requests') {
-        const data = await chatService.getFriendRequests();
-        setFriendRequests(data);
       }
     } catch (err) {
       console.error('Error loading chat data:', err);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
-  };
+  }, [activeTab, currentUser?.id]);
 
-  // Chat History Loading
+  // Socket setup - Always active for friendship & notifications
   useEffect(() => {
-    if (activeChat) {
-      loadMessages();
-      setShowChatParticipants(false);
-      
-      if (activeChat.type === 'direct') {
-        socketService.joinDirectChat(activeChat.id);
-        socketService.onNewDirectMessage(handleNewMessage);
-      } else {
-        socketService.joinEvent(activeChat.id);
-        socketService.onNewMessage(handleNewMessage);
-        // Load participants for event chat
-        eventService.getEventById(activeChat.id)
-          .then(ev => setChatParticipants(ev.participants || []))
-          .catch(err => console.error('Error loading participants:', err));
+    if (!currentUser) return;
+    
+    // Ensure socket is connected and in room
+    socketService.connect();
+    socketService.joinPersonalRoom(currentUser.id);
+
+    const refresh = () => {
+      loadTabData(true);
+    };
+
+    // Register friendship events
+    socketService.onFriendRequestReceived(refresh);
+    socketService.onFriendRequestAccepted(refresh);
+    socketService.onFriendRemoved(refresh);
+    socketService.onUserBlocked(refresh);
+    socketService.onUserUnblocked(refresh);
+    socketService.onChatListUpdate(refresh);
+    socketService.onKickedFromEvent(refresh);
+    
+    const handleEventDeleted = (data) => {
+      if (activeChat?.type === 'event' && activeChat?.id === data.eventId) {
+        setActiveChat(null);
       }
+      refresh();
+    };
+    socketService.onEventDeleted(handleEventDeleted);
 
-      // Listen for participant changes
-      const handleParticipantJoined = (data) => {
-        if (data.user) {
-          setChatParticipants(prev => {
-            if (prev.some(p => p.id === data.user.id)) return prev;
-            return [...prev, data.user];
-          });
-        }
-      };
-      const handleParticipantLeft = (data) => {
-        setChatParticipants(prev => prev.filter(p => p.id !== data.userId));
-      };
-      socketService.onParticipantJoined(handleParticipantJoined);
-      socketService.onParticipantLeft(handleParticipantLeft);
+    // Initial load for requests (for badge) even if closed
+    chatService.getFriendRequests().then(setFriendRequests).catch(err => console.error(err));
 
-      return () => {
-        if (activeChat.type === 'direct') {
-          socketService.leaveDirectChat(activeChat.id);
-          socketService.offNewDirectMessage(handleNewMessage);
-        } else {
-          socketService.leaveEvent(activeChat.id);
-          socketService.offNewMessage(handleNewMessage);
-        }
-        socketService.offParticipantJoined(handleParticipantJoined);
-        socketService.offParticipantLeft(handleParticipantLeft);
-      };
+    return () => {
+      socketService.offFriendRequestReceived(refresh);
+      socketService.offFriendRequestAccepted(refresh);
+      socketService.offFriendRemoved(refresh);
+      socketService.offUserBlocked(refresh);
+      socketService.offUserUnblocked(refresh);
+      socketService.offChatListUpdate(refresh);
+      socketService.offKickedFromEvent(refresh);
+      socketService.offEventDeleted(handleEventDeleted);
+    };
+  }, [currentUser?.id, loadTabData]); // Removed activeChat to avoid re-subscribing on every chat change
+
+  // Load tab data when panel is opened
+  useEffect(() => {
+    if (isOpen && currentUser) {
+      loadTabData();
     }
-  }, [activeChat]);
+  }, [isOpen, activeTab, loadTabData]);
 
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
+    if (!activeChat) return;
     try {
       let data;
       if (activeChat.type === 'direct') {
@@ -184,11 +139,7 @@ const ChatPanel = ({ currentUser }) => {
     } catch (err) {
       console.error('Error loading messages:', err);
     }
-  };
-
-  const handleNewMessage = (msg) => {
-    setMessages(prev => [...prev, msg]);
-  };
+  }, [activeChat]);
 
   const handleSendMessage = (e) => {
     e.preventDefault();
@@ -201,6 +152,68 @@ const ChatPanel = ({ currentUser }) => {
     }
     setNewMessage('');
   };
+
+  // Chat History Loading
+  useEffect(() => {
+    if (activeChat) {
+      const handleNewMessage = (msg) => {
+        setMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+      };
+
+      const handleMessageDeleted = (data) => {
+        setMessages(prev => prev.filter(m => m.id !== data.messageId));
+      };
+
+      const handleParticipantJoined = (data) => {
+        if (data.user) {
+          setChatParticipants(prev => {
+            if (prev.some(p => p.id === data.user.id)) return prev;
+            return [...prev, data.user];
+          });
+        }
+      };
+
+      const handleParticipantLeft = (data) => {
+        setChatParticipants(prev => prev.filter(p => p.id !== data.userId));
+      };
+
+      loadMessages();
+      setShowChatParticipants(false);
+      
+      socketService.onMessageDeleted(handleMessageDeleted);
+
+      if (activeChat.type === 'direct') {
+        socketService.joinDirectChat(activeChat.id);
+        socketService.onNewDirectMessage(handleNewMessage);
+      } else {
+        socketService.joinEvent(activeChat.id);
+        socketService.onNewMessage(handleNewMessage);
+        
+        eventService.getEventById(activeChat.id).then(data => {
+          setChatParticipants(data.participants || []);
+        });
+        
+        socketService.onParticipantJoined(handleParticipantJoined);
+        socketService.onParticipantLeft(handleParticipantLeft);
+      }
+
+      return () => {
+        if (activeChat.type === 'direct') {
+          socketService.leaveDirectChat(activeChat.id);
+          socketService.offNewDirectMessage(handleNewMessage);
+        } else {
+          socketService.leaveEvent(activeChat.id);
+          socketService.offNewMessage(handleNewMessage);
+          socketService.offParticipantJoined(handleParticipantJoined);
+          socketService.offParticipantLeft(handleParticipantLeft);
+        }
+        socketService.offMessageDeleted(handleMessageDeleted);
+      };
+    }
+  }, [activeChat, loadMessages]);
 
   const handleConfirm = async () => {
     const { action, targetId } = confirmModal;
@@ -359,6 +372,7 @@ const ChatPanel = ({ currentUser }) => {
     <div className={clsx('chat-panel-container', isOpen ? 'open' : 'closed')}>
       <div className="chat-panel-trigger" onClick={() => setIsOpen(!isOpen)}>
         <FaChevronRight size={18} />
+        {friendRequests.length > 0 && <div className="trigger-badge">{friendRequests.length}</div>}
       </div>
 
       <div className="chat-panel-content">

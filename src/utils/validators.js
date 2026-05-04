@@ -13,7 +13,7 @@ export const validatePhone = (phone) => {
   if (!phone) return null;
   const digitsOnly = phone.replace(/[^\d+]/g, '');
   if (!PHONE_REGEX.test(digitsOnly)) {
-    return 'Телефон повинен бути у форматі +380XXXXXXXXX або 0XXXXXXXXX.';
+    return 'Телефон повинен бути у форматі +380XXXXXXXXX.';
   }
   return null;
 };

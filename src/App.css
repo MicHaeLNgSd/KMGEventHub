@@ -1114,6 +1114,70 @@
 
 /* Z-INDEX: header: 1002, chat: 1100, event-panel: 1000, scroll: 999 */
 
+/* Medium screens + form panel is open */
+@media (min-width: 901px) and (max-width: 1200px) {
+  .app-shell.with-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 450px);
+    max-width: 100%;
+    gap: 15px;
+  }
+
+  .app-shell.with-panel .filters-bar.premium-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+    padding: 16px;
+  }
+  
+  .app-shell.with-panel .premium-filter-input,
+  .app-shell.with-panel .filter-input-wrapper {
+    width: 100%;
+    max-width: none;
+  }
+
+  .app-shell.with-panel .filter-input-wrapper .premium-filter-input {
+    width: 100%;
+  }
+  
+  .app-shell.with-panel .premium-checkbox-group {
+    flex-direction: row;
+    justify-content: center;
+    margin: 10px 0 0;
+    width: 100%;
+    gap: 20px;
+  }
+
+  .app-shell.with-panel .search-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .app-shell.with-panel .search-bar input[type="search"],
+  .app-shell.with-panel .search-bar input,
+  .app-shell.with-panel .search-bar .button {
+    width: 100%;
+    max-width: none;
+    flex: none;
+  }
+
+  .app-shell.with-panel .event-card {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .app-shell.with-panel .event-card-photo {
+    width: 100%;
+    height: 180px;
+  }
+
+  .app-shell.with-panel .pagination {
+    flex-direction: column;
+    gap: 15px;
+  }
+}
+
 @media (max-width: 900px) {
   .app-shell {
     padding: 16px 12px 24px;

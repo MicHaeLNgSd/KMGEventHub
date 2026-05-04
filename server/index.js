@@ -265,7 +265,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
       LEFT JOIN user_friends uf ON 
         (uf.user_id = $1 AND uf.friend_id = u.id) OR 
         (uf.user_id = u.id AND uf.friend_id = $1)
-      WHERE u.id <> $1 AND u.is_active = true
+      WHERE u.id <> $1
       ORDER BY u.created_at DESC
     `, [userId]);
     
@@ -589,49 +589,55 @@ app.get('/api/events', async (req, res) => {
     const queryParams = [];
 
     if (category) {
-      whereClauses.push(`e.category = $${whereClauses.length + 1}`);
+      whereClauses.push(`e.category = $${queryParams.length + 1}`);
       queryParams.push(category);
     }
 
     if (startDate) {
-      whereClauses.push(`e.event_date >= $${whereClauses.length + 1}`);
+      whereClauses.push(`e.event_date::date = CAST($${queryParams.length + 1} AS DATE)`);
       queryParams.push(startDate);
+    } else if (myEvents !== 'true' && joinedEvents !== 'true') {
+      // By default, hide past events for general browsing
+      whereClauses.push(`e.event_date >= NOW() - INTERVAL '1 day'`);
     }
 
     if (search) {
-      whereClauses.push(`(e.title ILIKE $${whereClauses.length + 1} OR e.description ILIKE $${whereClauses.length + 1} OR e.location ILIKE $${whereClauses.length + 1})`);
+      whereClauses.push(`(e.title ILIKE $${queryParams.length + 1} OR e.description ILIKE $${queryParams.length + 1} OR e.location ILIKE $${queryParams.length + 1})`);
       queryParams.push(`%${search}%`);
     }
 
     if (userId) {
       if (myEvents === 'true') {
-        whereClauses.push(`e.creator_id = $${whereClauses.length + 1}`);
+        whereClauses.push(`e.creator_id = $${queryParams.length + 1}`);
         queryParams.push(userId);
       } else if (joinedEvents === 'true') {
-        whereClauses.push(`e.id IN (SELECT event_id FROM event_participants WHERE user_id = $${whereClauses.length + 1} AND status IN ('approved', 'pending', 'registered'))`);
+        whereClauses.push(`e.id IN (SELECT event_id FROM event_participants WHERE user_id = $${queryParams.length + 1} AND status IN ('approved', 'pending', 'registered'))`);
         queryParams.push(userId);
       } else {
         // General list: hide private events unless admin or friend
         // Also hide events from people who blocked the viewer
+        const currentParam = queryParams.length + 1;
         whereClauses.push(`(
           e.is_private = false 
-          OR e.creator_id = $${whereClauses.length + 1} 
-          OR EXISTS (SELECT 1 FROM users WHERE id = $${whereClauses.length + 1} AND role = 'MODERATOR')
+          OR e.creator_id = $${currentParam} 
           OR EXISTS (
-            SELECT 1 FROM user_friends uf 
-            WHERE uf.status = 'accepted' 
-            AND ((uf.user_id = e.creator_id AND uf.friend_id = $${whereClauses.length + 1}) 
-                 OR (uf.user_id = $${whereClauses.length + 1} AND uf.friend_id = e.creator_id))
+            SELECT 1 FROM user_friends 
+            WHERE status = 'accepted' 
+            AND (
+              (user_id = e.creator_id AND friend_id = $${currentParam}) OR 
+              (friend_id = e.creator_id AND user_id = $${currentParam})
+            )
           )
         )`);
-        queryParams.push(userId);
         
-        // Block logic: hide events from people who blocked the viewer
+        // Block logic: hide events from people who blocked me OR whom I blocked
         whereClauses.push(`NOT EXISTS (
-          SELECT 1 FROM user_friends uf 
-          WHERE uf.status = 'blocked' 
-          AND uf.user_id = e.creator_id 
-          AND uf.friend_id = $${whereClauses.length + 1}
+          SELECT 1 FROM user_friends 
+          WHERE status = 'blocked' 
+          AND (
+            (user_id = e.creator_id AND friend_id = $${currentParam}) OR 
+            (friend_id = e.creator_id AND user_id = $${currentParam})
+          )
         )`);
         queryParams.push(userId);
       }
@@ -792,8 +798,8 @@ app.post('/api/auth/register', async (req, res) => {
     const trimmedPassword = password?.trim();
     const parsedAge = age ? parseInt(age, 10) : null;
 
-    if (!trimmedName || !trimmedNickname || !trimmedEmail || !trimmedPassword) {
-      return res.status(400).json({ error: 'Поле full_name, nickname, email та password є обов\'язковими.' });
+    if (!trimmedName || !trimmedNickname || !trimmedEmail || !trimmedPassword || !trimmedPhone || trimmedPhone === '+38') {
+      return res.status(400).json({ error: 'Поля full_name, nickname, email, password та phone_number є обов\'язковими.' });
     }
 
     if (trimmedPassword.length < 6) {
@@ -804,17 +810,20 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Вік повинен бути числом від 13 до 120.' });
     }
 
-    if (trimmedPhone && !isValidPhoneNumber(trimmedPhone)) {
-      return res.status(400).json({ error: 'Телефон повинен бути у форматі +380XXXXXXXXX або 0XXXXXXXXX.' });
+    if (!isValidPhoneNumber(trimmedPhone)) {
+      return res.status(400).json({ error: 'Телефон повинен бути у форматі +380XXXXXXXXX.' });
     }
 
     const userExists = await pool.query(
-      'SELECT id FROM users WHERE email = $1 OR nickname = $2',
-      [trimmedEmail, trimmedNickname]
+      'SELECT email, nickname, phone_number FROM users WHERE email = $1 OR nickname = $2 OR phone_number = $3',
+      [trimmedEmail, trimmedNickname, trimmedPhone]
     );
 
     if (userExists.rows.length > 0) {
-      return res.status(409).json({ error: 'Користувач з таким email або nickname вже існує.' });
+      const existing = userExists.rows[0];
+      if (existing.email === trimmedEmail) return res.status(409).json({ error: 'Користувач з таким email вже існує.' });
+      if (existing.nickname === trimmedNickname) return res.status(409).json({ error: 'Користувач з таким nickname вже існує.' });
+      if (existing.phone_number === trimmedPhone) return res.status(409).json({ error: 'Користувач з таким номером телефону вже існує.' });
     }
 
     const passwordHash = await bcrypt.hash(trimmedPassword, 10);
@@ -906,16 +915,19 @@ app.put('/api/users/:id', async (req, res) => {
     }
 
     if (trimmedPhone && !isValidPhoneNumber(trimmedPhone)) {
-      return res.status(400).json({ error: 'Телефон повинен бути у форматі +380XXXXXXXXX або 0XXXXXXXXX.' });
+      return res.status(400).json({ error: 'Телефон повинен бути у форматі +380XXXXXXXXX.' });
     }
 
     const existingUser = await pool.query(
-      'SELECT id FROM users WHERE (email = $1 OR nickname = $2) AND id <> $3',
-      [trimmedEmail, trimmedNickname, id]
+      'SELECT email, nickname, phone_number FROM users WHERE (email = $1 OR nickname = $2 OR phone_number = $3) AND id <> $4',
+      [trimmedEmail, trimmedNickname, trimmedPhone, id]
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(409).json({ error: 'Інший користувач з таким email або nickname вже існує.' });
+      const existing = existingUser.rows[0];
+      if (existing.email === trimmedEmail) return res.status(409).json({ error: 'Інший користувач з таким email вже існує.' });
+      if (existing.nickname === trimmedNickname) return res.status(409).json({ error: 'Інший користувач з таким nickname вже існує.' });
+      if (existing.phone_number === trimmedPhone) return res.status(409).json({ error: 'Інший користувач з таким номером телефону вже існує.' });
     }
 
     const result = await pool.query(

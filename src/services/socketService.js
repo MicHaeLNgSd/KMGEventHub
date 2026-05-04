@@ -10,6 +10,10 @@ class SocketService {
     const token = localStorage.getItem('authToken');
     if (!token) return;
 
+    if (this.socket && this.socket.connected) {
+      return;
+    }
+
     if (this.socket) {
       this.socket.disconnect();
     }

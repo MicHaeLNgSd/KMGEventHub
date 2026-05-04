@@ -84,6 +84,22 @@
   transition: transform 0.3s ease;
 }
 
+.trigger-badge {
+  position: absolute;
+  top: 5px;
+  right: -8px;
+  background: #ef4444;
+  color: white;
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 10px;
+  min-width: 14px;
+  text-align: center;
+  font-weight: 700;
+  border: 1px solid var(--surface);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 .chat-panel-container.open .chat-panel-trigger svg {
   transform: rotate(180deg);
 }
