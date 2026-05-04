@@ -1,13 +1,12 @@
+import { formatRelative } from 'date-fns';
+import { uk } from 'date-fns/locale';
 import { FaCalendarAlt } from 'react-icons/fa';
 import './EventCard.css';
 
 export default function EventCard({ event, onClick }) {
-  const eventDate = new Date(event.event_date).toLocaleDateString('uk-UA', {
-    day: 'numeric',
-    month: 'long',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const date = new Date(event.event_date);
+  const relativeDate = formatRelative(date, new Date(), { locale: uk });
+  const formattedDate = relativeDate.charAt(0).toUpperCase() + relativeDate.slice(1);
 
   return (
     <article
@@ -24,7 +23,7 @@ export default function EventCard({ event, onClick }) {
       <div className="event-card-info">
         <div className="event-card-header">
           <h3>{event.title}</h3>
-          <span className="event-date">{eventDate}</span>
+          <span className="event-date">{formattedDate}</span>
         </div>
         <p className="event-description">{event.description}</p>
         <div className="event-footer">

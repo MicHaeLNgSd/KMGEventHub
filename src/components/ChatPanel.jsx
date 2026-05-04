@@ -7,6 +7,8 @@ import {
   FaBan, FaCheck, FaTimes, FaEllipsisV, FaUserFriends, FaUserShield
 } from 'react-icons/fa';
 import { FiMessageSquare } from 'react-icons/fi';
+import { formatRelative, formatDistanceToNow } from 'date-fns';
+import { uk } from 'date-fns/locale';
 import { chatService } from '../services/chatService';
 import { eventService } from '../services/eventService';
 import { socketService } from '../services/socketService';
@@ -451,7 +453,7 @@ const ChatPanel = ({ currentUser }) => {
                     <div className="chat-item-header">
                       <span className="chat-item-name">{chat.friend_name}</span>
                       <span className="chat-item-time">
-                        {new Date(chat.last_message_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatDistanceToNow(new Date(chat.last_message_time), { addSuffix: true, locale: uk })}
                       </span>
                     </div>
                     <div className="chat-item-last-msg">
@@ -673,7 +675,7 @@ const ChatPanel = ({ currentUser }) => {
                         {msg.text}
                       </div>
                       <div className={clsx('chat-message-time', isMine && 'mine')}>
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true, locale: uk })}
                       </div>
                     </div>
                   </div>

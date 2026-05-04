@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
+import { formatRelative, formatDistanceToNow } from 'date-fns';
+import { uk } from 'date-fns/locale';
 import { FaPaperPlane, FaTrash, FaUsers, FaBookOpen, FaPencilAlt, FaCalendarAlt } from 'react-icons/fa';
 import API from '../utils/api';
 import { eventService } from '../services/eventService';
@@ -566,7 +568,7 @@ export default function EventFormPanel({
                           {msg.text}
                         </div>
                         <div className={clsx('chat-message-time', isMine && 'mine')}>
-                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true, locale: uk })}
                         </div>
                       </div>
                     </div>
