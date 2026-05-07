@@ -8,10 +8,10 @@ export default function Header({ currentUser: user }) {
   const isModerator = user?.role === 'MODERATOR'
 
   return (
-    <header className={clsx('site-header', isModerator && 'admin-header')}>
+    <header className={clsx('site-header', isModerator && 'moderator-header')}>
       <div className="header-left">
         <Link to="/home" className="brand-link" onClick={() => setMenuOpen(false)}>
-          <span className={clsx('brand-logo', isModerator && 'admin')}>KMG</span>
+          <span className={clsx('brand-logo', isModerator && 'moderator')}>KMG</span>
           <span className="brand-name">Offline Event Hub</span>
         </Link>
       </div>

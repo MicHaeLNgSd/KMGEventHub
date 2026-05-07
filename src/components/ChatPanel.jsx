@@ -12,6 +12,7 @@ import { uk } from 'date-fns/locale';
 import { chatService } from '../services/chatService';
 import { eventService } from '../services/eventService';
 import { socketService } from '../services/socketService';
+import API from '../utils/api';
 import './ChatPanel.css';
 
 const ChatPanel = ({ currentUser }) => {
@@ -244,7 +245,7 @@ const ChatPanel = ({ currentUser }) => {
     setConfirmModal(prev => ({ ...prev, show: false }));
   };
 
-  const handleAdminAction = async (action, id, name) => {
+  const handleModeratorAction = async (action, id, name) => {
     if (action === 'ban') {
       setConfirmModal({
         show: true,
@@ -511,7 +512,7 @@ const ChatPanel = ({ currentUser }) => {
                     <div className="chat-item-last-msg">@{person.nickname}</div>
                   </div>
                   <div className="person-actions">
-                    {/* Hide friend actions for admins as requested */}
+                    {/* Hide friend actions for moderators as requested */}
                     {currentUser.role !== 'MODERATOR' && (
                       person.friendship_status === 'blocked' ? (
                         <button className="action-btn unban-btn" onClick={() => handleFriendAction('unblock', person.id)} title="Розблокувати">
@@ -546,7 +547,7 @@ const ChatPanel = ({ currentUser }) => {
                       )
                     )}
 
-                    {/* Admin Ban Action - hide for self */}
+                    {/* Moderator Ban Action - hide for self */}
                     {currentUser.role === 'MODERATOR' && person.id !== currentUser.id && (
                       <>
                         <button className="action-btn msg-btn" onClick={() => setActiveChat({ type: 'direct', id: person.id, name: person.full_name })} title="Повідомлення">
@@ -554,7 +555,7 @@ const ChatPanel = ({ currentUser }) => {
                         </button>
                         <button 
                           className={clsx('action-btn', person.is_banned ? 'unban-btn' : 'block-btn')} 
-                          onClick={() => person.is_banned ? handleUnban(person.id) : handleAdminAction('ban', person.id, person.full_name)} 
+                          onClick={() => person.is_banned ? handleUnban(person.id) : handleModeratorAction('ban', person.id, person.full_name)} 
                           title={person.is_banned ? 'Розбанити' : 'Забанити акаунт'}
                         >
                           <FaUserShield />
@@ -641,7 +642,7 @@ const ChatPanel = ({ currentUser }) => {
                     {p.id !== activeChat.creator_id && p.id !== currentUser.id && (currentUser.id === activeChat.creator_id || currentUser.role === 'MODERATOR') && (
                       <button 
                         className="kick-participant-btn-small" 
-                        onClick={() => handleAdminAction('kick', p.id, p.full_name)}
+                        onClick={() => handleModeratorAction('kick', p.id, p.full_name)}
                         title="Видалити з івенту"
                       >
                         ✕
@@ -678,7 +679,7 @@ const ChatPanel = ({ currentUser }) => {
                           {(isMine || (activeChat.type === 'event' && (currentUser.id === activeChat.creator_id || currentUser.role === 'MODERATOR'))) && (
                             <button 
                               className="delete-msg-btn" 
-                              onClick={() => handleAdminAction('deleteMessage', msg.id)}
+                              onClick={() => handleModeratorAction('deleteMessage', msg.id)}
                               title="Видалити повідомлення"
                             >
                               ✕

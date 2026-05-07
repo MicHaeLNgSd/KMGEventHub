@@ -482,11 +482,11 @@ app.delete('/api/friends/unblock', authenticateToken, async (req, res) => {
   }
 });
 
-// Admin: Ban user
+// Moderator: Ban user
 app.put('/api/users/:id/ban', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'MODERATOR') {
-      return res.status(403).json({ error: 'Only admins can ban users' });
+      return res.status(403).json({ error: 'Only moderators can ban users' });
     }
     const { id } = req.params;
     await pool.query('UPDATE users SET is_banned = true WHERE id = $1', [id]);
@@ -500,11 +500,11 @@ app.put('/api/users/:id/ban', authenticateToken, async (req, res) => {
   }
 });
 
-// Admin: Unban user
+// Moderator: Unban user
 app.put('/api/users/:id/unban', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'MODERATOR') {
-      return res.status(403).json({ error: 'Only admins can unban users' });
+      return res.status(403).json({ error: 'Only moderators can unban users' });
     }
     const { id } = req.params;
     await pool.query('UPDATE users SET is_banned = false WHERE id = $1', [id]);
@@ -514,13 +514,13 @@ app.put('/api/users/:id/unban', authenticateToken, async (req, res) => {
   }
 });
 
-// Admin/Author: Remove participant from event
+// Moderator/Author: Remove participant from event
 app.delete('/api/events/:id/participants/:userId', authenticateToken, async (req, res) => {
   try {
     const { id: eventId, userId: participantId } = req.params;
     const userId = req.user.id;
 
-    // Check if requester is author or admin
+    // Check if requester is author or moderator
     const eventResult = await pool.query('SELECT creator_id FROM events WHERE id = $1', [eventId]);
     if (eventResult.rows.length === 0) return res.status(404).json({ error: 'Event not found' });
     
@@ -614,7 +614,7 @@ app.get('/api/events', async (req, res) => {
         whereClauses.push(`e.id IN (SELECT event_id FROM event_participants WHERE user_id = $${queryParams.length + 1} AND status IN ('approved', 'pending', 'registered'))`);
         queryParams.push(userId);
       } else {
-        // General list: hide private events unless admin or friend
+        // General list: hide private events unless moderator or friend
         // Also hide events from people who blocked the viewer
         const currentParam = queryParams.length + 1;
         whereClauses.push(`(
@@ -872,7 +872,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     const { password_hash, ...userData } = user;
     if (user.is_banned) {
-      return res.status(403).json({ error: 'Цей акаунт заблоковано адміністратором.' });
+      return res.status(403).json({ error: 'Цей акаунт заблоковано модератором.' });
     }
     const token = generateToken({ id: userData.id, email: userData.email });
     res.json({ message: 'Успішний вхід.', token, user: { id: userData.id, full_name: userData.full_name, nickname: userData.nickname, role: userData.role } });

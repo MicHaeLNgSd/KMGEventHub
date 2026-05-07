@@ -19,7 +19,7 @@
   transition: all 0.3s ease;
 }
 
-.site-header.admin-header {
+.site-header.moderator-header {
   border-bottom: 2px solid #e11d48;
   background: linear-gradient(to right, var(--surface), #fff1f2);
 }
@@ -44,8 +44,8 @@
   font-weight: 700;
 }
 
-.brand-logo.admin {
-  background: #e11d48; /* Sophisticated red for admins */
+.brand-logo.moderator {
+  background: #e11d48; /* Sophisticated red for moderators */
   box-shadow: 0 0 15px rgba(225, 29, 72, 0.3);
 }
 
@@ -1297,7 +1297,7 @@
     position: relative;
   }
 
-  .admin-header .header-nav {
+  .moderator-header .header-nav {
     background: linear-gradient(to bottom, #fff1f2, var(--surface));
   }
 
