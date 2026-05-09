@@ -33,7 +33,7 @@ if (!fs.existsSync(uploadDir)) {
 // Socket.io initialization
 const io = new Server(httpServer, {
   cors: {
-    origin: '*', // Allow all origins for development
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE']
   }
 });
@@ -187,7 +187,6 @@ io.on('connection', (socket) => {
       const maxId = Math.max(senderId, parseInt(receiverId, 10));
       io.to(`direct_${minId}_${maxId}`).emit('newDirectMessage', newMessage);
       
-      // Notify receiver for chat list update
       io.to(`user_${receiverId}`).emit('chatListUpdate', newMessage);
       io.to(`user_${senderId}`).emit('chatListUpdate', newMessage);
     } catch (err) {
@@ -269,7 +268,6 @@ app.get('/api/users', authenticateToken, async (req, res) => {
       ORDER BY u.created_at DESC
     `, [userId]);
     
-    // Process block status
     const users = result.rows.map(row => {
       if (row.friendship_status === 'blocked') {
         row.is_blocked_by_me = (row.requester_id === userId);
@@ -309,7 +307,6 @@ app.post('/api/users/offline', async (req, res) => {
     await pool.query('UPDATE users SET is_active = false WHERE id = $1', [decoded.id]);
     res.json({ success: true });
   } catch (error) {
-    // We ignore invalid token errors for beacon
     res.status(400).json({ error: 'Invalid or expired token' });
   }
 });
@@ -330,7 +327,6 @@ app.get('/api/users/:id', async (req, res) => {
 
 // FRIENDSHIP ENDPOINTS
 
-// Get pending friend requests
 app.get('/api/friends/requests', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -356,7 +352,6 @@ app.post('/api/friends/request', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Cannot add yourself as friend' });
     }
 
-    // Check if record exists
     const existing = await pool.query(
       'SELECT status FROM user_friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
       [userId, friendId]
@@ -371,7 +366,6 @@ app.post('/api/friends/request', authenticateToken, async (req, res) => {
       [userId, friendId]
     );
 
-    // Notify target real-time
     const senderInfo = await pool.query('SELECT full_name FROM users WHERE id = $1', [userId]);
     io.to(`user_${friendId}`).emit('friendRequestReceived', { fromUserId: userId, fromName: senderInfo.rows[0]?.full_name });
 
@@ -417,7 +411,6 @@ app.delete('/api/friends/remove', authenticateToken, async (req, res) => {
       [userId, friendId]
     );
 
-    // Notify the other user
     io.to(`user_${friendId}`).emit('friendRemoved', { byUserId: userId });
 
     res.json({ success: true });
@@ -431,28 +424,23 @@ app.post('/api/friends/block', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const { friendId } = req.body;
-    
     console.log(`User ${userId} blocking user ${friendId}`);
 
-    // Reset relation to avoid conflicts
     await pool.query(
       'DELETE FROM user_friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
       [userId, friendId]
     );
 
-    // Insert block status
     await pool.query(`
       INSERT INTO user_friends (user_id, friend_id, status)
       VALUES ($1, $2, 'blocked')
     `, [userId, friendId]);
 
-    // Clear chat history
     await pool.query(
       'DELETE FROM messages WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1)',
       [userId, friendId]
     );
 
-    // Notify blocked user
     io.to(`user_${friendId}`).emit('userBlocked', { byUserId: userId });
 
     res.json({ success: true });
@@ -520,7 +508,6 @@ app.delete('/api/events/:id/participants/:userId', authenticateToken, async (req
     const { id: eventId, userId: participantId } = req.params;
     const userId = req.user.id;
 
-    // Check if requester is author or moderator
     const eventResult = await pool.query('SELECT creator_id FROM events WHERE id = $1', [eventId]);
     if (eventResult.rows.length === 0) return res.status(404).json({ error: 'Event not found' });
     
@@ -544,7 +531,7 @@ app.delete('/api/events/:id/participants/:userId', authenticateToken, async (req
   }
 });
 
-// Get all events with optional filtering
+
 app.get('/api/events', async (req, res) => {
   try {
     const { 
@@ -615,7 +602,6 @@ app.get('/api/events', async (req, res) => {
         queryParams.push(userId);
       } else {
         // General list: hide private events unless moderator or friend
-        // Also hide events from people who blocked the viewer
         const currentParam = queryParams.length + 1;
         whereClauses.push(`(
           e.is_private = false 
@@ -642,7 +628,6 @@ app.get('/api/events', async (req, res) => {
         queryParams.push(userId);
       }
     } else {
-      // No userId (unauthenticated) - hide all private events
       whereClauses.push(`e.is_private = false`);
     }
 
@@ -652,7 +637,6 @@ app.get('/api/events', async (req, res) => {
 
     queryText += ' GROUP BY e.id, u.id';
 
-    // Min/Max participants check (current participants)
     if (minParticipants || maxParticipants) {
       const havingClauses = [];
       if (minParticipants) {
@@ -660,7 +644,6 @@ app.get('/api/events', async (req, res) => {
         queryParams.push(parseInt(minParticipants, 10));
       }
       if (maxParticipants) {
-        // Here maxParticipants means the USER'S FILTER for max limit
         havingClauses.push(`e.max_participants <= $${queryParams.length + 1}`);
         queryParams.push(parseInt(maxParticipants, 10));
       }
@@ -687,7 +670,6 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
-// Get event by ID with full details
 app.get('/api/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -721,7 +703,6 @@ app.get('/api/events/:id', async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
-    // Get participants
     const participantsResult = await pool.query(`
       SELECT u.id, u.full_name, u.nickname, u.age, u.photo_url, ep.status
       FROM event_participants ep
@@ -762,7 +743,6 @@ app.get('/api/users/:userId/events', async (req, res) => {
   }
 });
 
-// Get user registrations
 app.get('/api/users/:userId/registrations', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -956,13 +936,11 @@ app.put('/api/users/:id', async (req, res) => {
   }
 });
 
-// Create new event
 app.post('/api/events', authenticateToken, async (req, res) => {
   try {
     const { title, description, location, latitude, longitude, event_date, max_participants, is_private, category, photo_url } = req.body;
     const creator_id = req.user.id;
 
-    // Validation
     if (!creator_id || !title || !location || !event_date) {
       return res.status(400).json({ 
         error: 'Обов\'язкові поля: creator_id, title, location, event_date' 
@@ -984,13 +962,11 @@ app.post('/api/events', authenticateToken, async (req, res) => {
   }
 });
 
-// Update event
 app.put('/api/events/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, location, latitude, longitude, event_date, max_participants, is_private, category, photo_url } = req.body;
 
-    // Check if user has permission to edit
     const eventResult = await pool.query('SELECT creator_id FROM events WHERE id = $1', [id]);
     if (eventResult.rows.length === 0) {
       return res.status(404).json({ error: 'Event not found' });
@@ -1028,7 +1004,6 @@ app.put('/api/events/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
-    // Notify participants
     io.to(`event_${id}`).emit('eventUpdated', { eventId: parseInt(id), event: result.rows[0] });
 
     res.json({ message: 'Event updated successfully', event: result.rows[0] });
@@ -1038,12 +1013,10 @@ app.put('/api/events/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete event
 app.delete('/api/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Notify participants
     io.to(`event_${id}`).emit('eventDeleted', { eventId: parseInt(id) });
 
     const result = await pool.query(
@@ -1062,13 +1035,11 @@ app.delete('/api/events/:id', async (req, res) => {
   }
 });
 
-// Join event
 app.post('/api/events/:id/join', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
 
-    // Check if already participant
     const existing = await pool.query('SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2', [id, userId]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Ви вже є учасником цього заходу' });
@@ -1079,7 +1050,6 @@ app.post('/api/events/:id/join', authenticateToken, async (req, res) => {
       [id, userId]
     );
 
-    // Notify event chat about new participant
     const userInfo = await pool.query('SELECT id, full_name, nickname, photo_url FROM users WHERE id = $1', [userId]);
     io.to(`event_${id}`).emit('participantJoined', { eventId: parseInt(id), user: userInfo.rows[0] });
 
@@ -1090,7 +1060,6 @@ app.post('/api/events/:id/join', authenticateToken, async (req, res) => {
   }
 });
 
-// Leave event
 app.delete('/api/events/:id/leave', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -1105,7 +1074,6 @@ app.delete('/api/events/:id/leave', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Ви не є учасником цього заходу' });
     }
 
-    // Notify event chat about participant leaving
     io.to(`event_${id}`).emit('participantLeft', { eventId: parseInt(id), userId });
 
     res.json({ message: 'Ви успішно покинули захід' });
@@ -1115,16 +1083,15 @@ app.delete('/api/events/:id/leave', authenticateToken, async (req, res) => {
   }
 });
 
-// Get messages for event
 app.get('/api/events/:id/messages', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
     const result = await pool.query(`
       SELECT m.id, m.text, m.created_at, u.id as sender_id, 
-             CASE WHEN u.is_active = true THEN u.full_name ELSE 'Deleted' END as sender_name,
-             CASE WHEN u.is_active = true THEN u.nickname ELSE 'deleted' END as sender_nickname,
-             CASE WHEN u.is_active = true THEN u.photo_url ELSE NULL END as sender_photo
+        u.full_name as sender_name,
+        u.nickname as sender_nickname,
+        u.photo_url as sender_photo
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE m.event_id = $1
@@ -1138,7 +1105,6 @@ app.get('/api/events/:id/messages', authenticateToken, async (req, res) => {
   }
 });
 
-// Send message to event
 app.post('/api/events/:id/messages', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -1175,12 +1141,10 @@ app.post('/api/events/:id/messages', authenticateToken, async (req, res) => {
   }
 });
 
-// Get personal chat list (distinct users communicated with)
 app.get('/api/chats/personal', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // Latest message per partner
     const result = await pool.query(`
       WITH RankedMessages AS (
         SELECT 
@@ -1227,7 +1191,6 @@ app.get('/api/chats/personal', authenticateToken, async (req, res) => {
   }
 });
 
-// Get direct messages with a specific user
 app.get('/api/messages/direct/:friendId', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -1235,9 +1198,9 @@ app.get('/api/messages/direct/:friendId', authenticateToken, async (req, res) =>
     
     const result = await pool.query(`
       SELECT m.id, m.text, m.created_at, m.receiver_id, u.id as sender_id, 
-             CASE WHEN u.is_active = true THEN u.full_name ELSE 'Deleted' END as sender_name,
-             CASE WHEN u.is_active = true THEN u.nickname ELSE 'deleted' END as sender_nickname,
-             CASE WHEN u.is_active = true THEN u.photo_url ELSE NULL END as sender_photo
+        u.full_name as sender_name,
+        u.nickname as sender_nickname,
+        u.photo_url as sender_photo
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE (m.sender_id = $1 AND m.receiver_id = $2) OR (m.sender_id = $2 AND m.receiver_id = $1)
@@ -1251,22 +1214,17 @@ app.get('/api/messages/direct/:friendId', authenticateToken, async (req, res) =>
   }
 });
 
-// Delete message
 app.delete('/api/messages/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
 
-    // Check message info
     const msgResult = await pool.query('SELECT sender_id, event_id FROM messages WHERE id = $1', [id]);
     if (msgResult.rows.length === 0) return res.status(404).json({ error: 'Message not found' });
     
     const message = msgResult.rows[0];
-    
-    // Check if user is sender
     let canDelete = message.sender_id === userId;
     
-    // If not sender, check if they are event creator or moderator
     if (!canDelete) {
       if (req.user.role === 'MODERATOR') {
         canDelete = true;
@@ -1284,13 +1242,10 @@ app.delete('/api/messages/:id', authenticateToken, async (req, res) => {
 
     await pool.query('DELETE FROM messages WHERE id = $1', [id]);
 
-    // Notify chat participants about message deletion
     if (message.event_id) {
       io.to(`event_${message.event_id}`).emit('messageDeleted', { messageId: parseInt(id) });
     } else {
-      // Direct message - notify both users
       const fullMsg = await pool.query('SELECT sender_id, receiver_id FROM messages WHERE id = $1', [id]);
-      // Message already deleted, use data we fetched earlier
       const minId = Math.min(message.sender_id, userId);
       const maxId = Math.max(message.sender_id, userId);
       io.to(`direct_${minId}_${maxId}`).emit('messageDeleted', { messageId: parseInt(id) });
@@ -1302,13 +1257,11 @@ app.delete('/api/messages/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
-// Start server
 httpServer.listen(PORT, () => {
   console.log(`✓ Server running on http://localhost:${PORT}`);
   console.log(`✓ Database: ${process.env.POSTGRES_DB || 'kmg_events_db'}`);
