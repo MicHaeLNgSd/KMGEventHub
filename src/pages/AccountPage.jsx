@@ -136,7 +136,7 @@ export default function AccountPage({ currentUser: globalUser, setUser: setGloba
       })
 
       setUser(response.data.user)
-      // setGlobalUser(response.data.user)
+      setGlobalUser(response.data.user)
       setMessage('Профіль успішно збережено.')
       // User data is now fetched via API on each load
     } catch (saveError) {
@@ -169,7 +169,7 @@ export default function AccountPage({ currentUser: globalUser, setUser: setGloba
       })
 
       setUser(response.data.user)
-      // setGlobalUser(response.data.user)
+      setGlobalUser(response.data.user)
       setMessage('Аватар успішно оновлено.')
     } catch (err) {
       console.error('Avatar upload error:', err)
@@ -187,7 +187,7 @@ export default function AccountPage({ currentUser: globalUser, setUser: setGloba
         photo_url: null
       })
       setUser(response.data.user)
-      // setGlobalUser(response.data.user)
+      setGlobalUser(response.data.user)
       setMessage('Аватар видалено.')
     } catch (err) {
       console.error('Avatar removal error:', err)
