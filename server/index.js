@@ -921,7 +921,7 @@ app.put('/api/users/:id', async (req, res) => {
            photo_url = $7,
            updated_at = NOW()
        WHERE id = $8
-       RETURNING id, full_name, nickname, age, email, phone_number, bio, photo_url, is_active, created_at, updated_at`,
+       RETURNING id, full_name, nickname, age, email, phone_number, bio, photo_url, role, is_active, created_at, updated_at`,
       [trimmedName, trimmedNickname, parsedAge, trimmedPhone || null, trimmedEmail, trimmedBio || null, photo_url || null, id]
     );
 

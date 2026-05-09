@@ -1,4 +1,3 @@
--- Users table
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   phone_number VARCHAR(20) UNIQUE,
@@ -15,7 +14,6 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Events table
 CREATE TABLE IF NOT EXISTS events (
   id SERIAL PRIMARY KEY,
   creator_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -32,7 +30,6 @@ CREATE TABLE IF NOT EXISTS events (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Event participants (registration)
 CREATE TABLE IF NOT EXISTS event_participants (
   id SERIAL PRIMARY KEY,
   event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -42,7 +39,6 @@ CREATE TABLE IF NOT EXISTS event_participants (
   UNIQUE(event_id, user_id)
 );
 
--- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_events_creator_id ON events(creator_id);
 CREATE INDEX IF NOT EXISTS idx_events_event_date ON events(event_date);
 CREATE INDEX IF NOT EXISTS idx_event_participants_event_id ON event_participants(event_id);
