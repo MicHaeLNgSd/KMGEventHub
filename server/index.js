@@ -1262,7 +1262,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
-httpServer.listen(PORT, () => {
+
+httpServer.listen(PORT, async () => {
   console.log(`✓ Server running on http://localhost:${PORT}`);
-  console.log(`✓ Database: ${process.env.POSTGRES_DB || 'kmg_events_db'}`);
+  try {
+    const res = await pool.query('SELECT NOW()');
+    console.log(`✓ Database connected: ${res.rows[0].now}`);
+  } catch (err) {
+    console.error('✗ Database connection failed!', err.message);
+  }
 });
