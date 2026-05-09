@@ -507,7 +507,11 @@ const ChatPanel = ({ currentUser }) => {
                   </div>
                   <div className="chat-item-info">
                     <div className="chat-item-header">
-                      <span className="chat-item-name">{person.full_name}</span>
+                      <span className="chat-item-name">
+                        {person.is_banned && <span className="banned-badge-mini">BAN</span>}
+                        {person.role === 'MODERATOR' && <span className="role-badge-mini">MOD</span>}
+                        {person.full_name}
+                      </span>
                     </div>
                     <div className="chat-item-last-msg">@{person.nickname}</div>
                   </div>
@@ -547,8 +551,8 @@ const ChatPanel = ({ currentUser }) => {
                       )
                     )}
 
-                    {/* Moderator Ban Action - hide for self */}
-                    {currentUser.role === 'MODERATOR' && person.id !== currentUser.id && (
+                    {/* Moderator Ban Action - hide for self and other moderators */}
+                    {currentUser.role === 'MODERATOR' && person.id !== currentUser.id && person.role !== 'MODERATOR' && (
                       <>
                         <button className="action-btn msg-btn" onClick={() => setActiveChat({ type: 'direct', id: person.id, name: person.full_name })} title="Повідомлення">
                           <FiMessageSquare />

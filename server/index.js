@@ -257,7 +257,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const result = await pool.query(`
       SELECT 
-        u.id, u.full_name, u.nickname, u.age, u.email, u.photo_url,
+        u.id, u.full_name, u.nickname, u.age, u.email, u.photo_url, u.is_banned, u.role,
         uf.status as friendship_status,
         uf.user_id as requester_id
       FROM users u

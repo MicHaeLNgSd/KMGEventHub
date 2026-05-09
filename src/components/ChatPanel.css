@@ -544,6 +544,29 @@
 .unban-btn { background: #ef4444; color: white; }
 .unban-btn:hover { background: #dc2626; transform: scale(1.05); }
 
+.banned-badge-mini {
+  background: #fee2e2;
+  color: #ef4444;
+  font-size: 0.6rem;
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-right: 6px;
+  font-weight: 700;
+  vertical-align: middle;
+  border: 1px solid #fecaca;
+}
+
+.role-badge-mini {
+  background: #e0e7ff;
+  color: #4338ca;
+  font-size: 0.6rem;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-weight: 700;
+  border: 1px solid #c7d2fe;
+  margin-right: 6px;
+}
+
 .accept-btn { background: #10b981; color: white; }
 .accept-btn:hover { background: #059669; transform: scale(1.05); }
 
