@@ -499,6 +499,7 @@ app.delete('/api/events/:id/participants/:userId', authenticateToken, async (req
 
     // Notify all event participants so their UI updates
     io.to(`event_${eventId}`).emit('participantLeft', { eventId: parseInt(eventId), userId: parseInt(participantId) });
+    io.to(`user_${participantId}`).emit('chatListUpdate');
 
     res.json({ success: true, message: 'Participant removed' });
   } catch (error) {
@@ -1027,6 +1028,7 @@ app.post('/api/events/:id/join', authenticateToken, async (req, res) => {
 
     const userInfo = await pool.query('SELECT id, full_name, nickname, photo_url FROM users WHERE id = $1', [userId]);
     io.to(`event_${id}`).emit('participantJoined', { eventId: parseInt(id), user: userInfo.rows[0] });
+    io.to(`user_${userId}`).emit('chatListUpdate');
 
     res.status(201).json({ message: 'Ви успішно приєдналися до заходу', participant: result.rows[0] });
   } catch (error) {
@@ -1050,6 +1052,7 @@ app.delete('/api/events/:id/leave', authenticateToken, async (req, res) => {
     }
 
     io.to(`event_${id}`).emit('participantLeft', { eventId: parseInt(id), userId });
+    io.to(`user_${userId}`).emit('chatListUpdate');
 
     res.json({ message: 'Ви успішно покинули захід' });
   } catch (error) {

@@ -109,12 +109,20 @@ export default function EventFormPanel({
       }
     };
 
+    const handleKicked = (data) => {
+      if (data.eventId === selectedEvent.id) {
+        onClose();
+      }
+    };
+
     socketService.onParticipantJoined(handleJoined);
     socketService.onParticipantLeft(handleLeft);
+    socketService.onKickedFromEvent(handleKicked);
 
     return () => {
       socketService.offParticipantJoined(handleJoined);
       socketService.offParticipantLeft(handleLeft);
+      socketService.offKickedFromEvent(handleKicked);
     };
   }, [selectedEvent?.id]);
 

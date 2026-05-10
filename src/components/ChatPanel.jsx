@@ -60,10 +60,16 @@ const ChatPanel = ({ currentUser }) => {
         const data = await chatService.getPersonalChats();
         setPersonalChats(data);
       } else if (activeTab === 'events') {
-        const response = await eventService.getEvents({ userId: currentUser.id, joinedEvents: true });
-        const myResponse = await eventService.getEvents({ userId: currentUser.id, myEvents: true });
-        const allEvents = [...response.events, ...myResponse.events];
-        const uniqueEvents = Array.from(new Map(allEvents.map(item => [item.id, item])).values());
+        let uniqueEvents = [];
+        if (isModerator) {
+          const response = await eventService.getEvents({ limit: 100 });
+          uniqueEvents = response.events;
+        } else {
+          const response = await eventService.getEvents({ userId: currentUser.id, joinedEvents: true, limit: 100 });
+          const myResponse = await eventService.getEvents({ userId: currentUser.id, myEvents: true, limit: 100 });
+          const allEvents = [...response.events, ...myResponse.events];
+          uniqueEvents = Array.from(new Map(allEvents.map(item => [item.id, item])).values());
+        }
         setEvents(uniqueEvents);
       } else if (activeTab === 'people') {
         const data = await chatService.getAllUsers();
@@ -516,7 +522,6 @@ const ChatPanel = ({ currentUser }) => {
                     <div className="chat-item-last-msg">@{person.nickname}</div>
                   </div>
                   <div className="person-actions">
-                    {/* Hide friend actions for moderators as requested */}
                     {currentUser.role !== 'MODERATOR' && (
                       person.friendship_status === 'blocked' ? (
                         <button className="action-btn unban-btn" onClick={() => handleFriendAction('unblock', person.id)} title="Розблокувати">
@@ -544,26 +549,46 @@ const ChatPanel = ({ currentUser }) => {
                           <button className="action-btn msg-btn" onClick={() => setActiveChat({ type: 'direct', id: person.id, name: person.full_name })} title="Повідомлення">
                             <FiMessageSquare />
                           </button>
-                          <button className="action-btn block-btn" onClick={() => handleFriendAction('block', person.id, person.full_name)} title="Заблокувати">
-                            <FaBan />
-                          </button>
+                          {person.role !== 'MODERATOR' && (
+                            <button className="action-btn block-btn" onClick={() => handleFriendAction('block', person.id, person.full_name)} title="Заблокувати">
+                              <FaBan />
+                            </button>
+                          )}
                         </>
                       )
                     )}
 
-                    {/* Moderator Ban Action - hide for self and other moderators */}
-                    {currentUser.role === 'MODERATOR' && person.id !== currentUser.id && person.role !== 'MODERATOR' && (
+                    {currentUser.role === 'MODERATOR' && person.id !== currentUser.id && (
                       <>
+                        {person.friendship_status === 'accepted' ? (
+                            <button className="action-btn remove-btn" onClick={() => handleFriendAction('remove', person.id, person.full_name)} title="Видалити з друзів">
+                              <FaUserMinus />
+                            </button>
+                          ) : (
+                            person.friendship_status === 'pending' ? (
+                              person.requester_id === currentUser.id ? (
+                                <button className="action-btn cancel-btn" onClick={() => handleFriendAction('remove', person.id)} title="Скасувати запит">
+                                  <FaTimes />
+                                </button>
+                              ) : null 
+                            ) : (
+                              <button className="action-btn add-btn" onClick={() => handleFriendAction('request', person.id)} title="Додати в друзі">
+                                <FaUserPlus />
+                              </button>
+                            )
+                          )}
                         <button className="action-btn msg-btn" onClick={() => setActiveChat({ type: 'direct', id: person.id, name: person.full_name })} title="Повідомлення">
                           <FiMessageSquare />
                         </button>
-                        <button 
-                          className={clsx('action-btn', person.is_banned ? 'unban-btn' : 'block-btn')} 
-                          onClick={() => person.is_banned ? handleUnban(person.id) : handleModeratorAction('ban', person.id, person.full_name)} 
-                          title={person.is_banned ? 'Розбанити' : 'Забанити акаунт'}
-                        >
-                          <FaUserShield />
-                        </button>
+                        {person.role !== 'MODERATOR' &&
+                          <button 
+                            className={clsx('action-btn', person.is_banned ? 'unban-btn' : 'block-btn')} 
+                            onClick={() => person.is_banned ? handleUnban(person.id) : handleModeratorAction('ban', person.id, person.full_name)} 
+                            title={person.is_banned ? 'Розбанити' : 'Забанити акаунт'}
+                          >
+                            <FaUserShield />
+                          </button>
+                        }
                       </>
                     )}
                   </div>
