@@ -9,6 +9,8 @@ import path from 'path';
 import fs from 'fs';
 import pool from './db/config.js';
 import { generateToken, verifyToken } from './config/jwt.js';
+import authRoutes from './routes/auth.js';
+import { authenticateToken, checkEventAccess } from './middleware/auth.js';
 
 dotenv.config();
 
@@ -42,6 +44,7 @@ const io = new Server(httpServer, {
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadDir));
+app.use('/api/auth', authRoutes);
 
 // Multer config
 const storage = multer.diskStorage({
@@ -199,34 +202,6 @@ io.on('connection', (socket) => {
     console.log(`User disconnected from socket: ${socket.user.id}`);
   });
 });
-
-// Authentication middleware
-const authenticateToken = async (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  try {
-    const decoded = verifyToken(token);
-    const userResult = await pool.query('SELECT id, role, is_banned FROM users WHERE id = $1', [decoded.id]);
-    if (userResult.rows.length === 0) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-    
-    const user = userResult.rows[0];
-    if (user.is_banned) {
-      return res.status(403).json({ error: 'Your account is banned' });
-    }
-    
-    req.user = user;
-    next();
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid or expired token' });
-  }
-};
 
 // Test database connection
 app.get('/api/health', async (req, res) => {
@@ -589,7 +564,7 @@ app.get('/api/events', async (req, res) => {
     }
 
     if (search) {
-      whereClauses.push(`(e.title ILIKE $${queryParams.length + 1} OR e.description ILIKE $${queryParams.length + 1} OR e.location ILIKE $${queryParams.length + 1})`);
+      whereClauses.push(`CONCAT_WS(' ', e.title, u.full_name, u.nickname, e.description, e.location) ILIKE $${queryParams.length + 1}`);
       queryParams.push(`%${search}%`);
     }
 
@@ -640,7 +615,7 @@ app.get('/api/events', async (req, res) => {
     if (minParticipants || maxParticipants) {
       const havingClauses = [];
       if (minParticipants) {
-        havingClauses.push(`COUNT(DISTINCT ep.id) >= $${queryParams.length + 1}`);
+        havingClauses.push(`(e.max_participants IS NULL OR e.max_participants >= $${queryParams.length + 1})`);
         queryParams.push(parseInt(minParticipants, 10));
       }
       if (maxParticipants) {
@@ -1083,7 +1058,7 @@ app.delete('/api/events/:id/leave', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/events/:id/messages', authenticateToken, async (req, res) => {
+app.get('/api/events/:id/messages', authenticateToken, checkEventAccess, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -1105,7 +1080,7 @@ app.get('/api/events/:id/messages', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/events/:id/messages', authenticateToken, async (req, res) => {
+app.post('/api/events/:id/messages', authenticateToken, checkEventAccess, async (req, res) => {
   try {
     const { id } = req.params;
     const { text } = req.body;

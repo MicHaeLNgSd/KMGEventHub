@@ -58,13 +58,13 @@ router.post('/register', async (req, res) => {
     const result = await pool.query(
       `INSERT INTO users (phone_number, full_name, nickname, age, email, password_hash)
        VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, full_name, nickname, age, email, phone_number, role, created_at, updated_at`,
+       RETURNING id, full_name, nickname, age, email, phone_number, role, photo_url, created_at, updated_at`,
       [trimmedPhone || null, trimmedName, trimmedNickname, parsedAge, trimmedEmail, passwordHash]
     );
 
     const newUser = result.rows[0];
     const token = generateToken({ id: newUser.id, email: newUser.email });
-    res.status(201).json({ message: 'Користувача створено успішно.', token, user: { id: newUser.id, full_name: newUser.full_name, nickname: newUser.nickname, role: newUser.role } });
+    res.status(201).json({ message: 'Користувача створено успішно.', token, user: { id: newUser.id, full_name: newUser.full_name, nickname: newUser.nickname, role: newUser.role, photo_url: newUser.photo_url } });
   } catch (error) {
     console.error('Error registering user:', error);
     res.status(500).json({ error: 'Помилка сервера при реєстрації.' });
@@ -83,7 +83,7 @@ router.post('/login', async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT id, full_name, nickname, age, email, phone_number, password_hash, role, is_banned FROM users WHERE email = $1',
+      'SELECT id, full_name, nickname, age, email, phone_number, password_hash, role, is_banned, photo_url FROM users WHERE email = $1',
       [trimmedEmail]
     );
 
@@ -103,7 +103,7 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Цей акаунт заблоковано модератором.' });
     }
     const token = generateToken({ id: userData.id, email: userData.email });
-    res.json({ message: 'Успішний вхід.', token, user: { id: userData.id, full_name: userData.full_name, nickname: userData.nickname, role: userData.role } });
+    res.json({ message: 'Успішний вхід.', token, user: { id: userData.id, full_name: userData.full_name, nickname: userData.nickname, role: userData.role, photo_url: user.photo_url } });
   } catch (error) {
     console.error('Error logging in:', error);
     res.status(500).json({ error: 'Помилка сервера при вході.' });

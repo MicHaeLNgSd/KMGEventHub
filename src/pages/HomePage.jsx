@@ -296,7 +296,7 @@ export default function HomePage({ currentUser, setUser }) {
           <div className="search-bar">
             <input
               type="search"
-              placeholder="Пошук заходів за назвою, локацією або категорією"
+              placeholder="Пошук заходів за назвою, організатором, локацією або категорією"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -373,15 +373,17 @@ export default function HomePage({ currentUser, setUser }) {
             </div>
             
             <div className="premium-checkbox-group">
-              <label className="premium-checkbox-label">
-                <input 
-                  type="checkbox" 
-                  checked={filterMyEvents} 
-                  onChange={e => setFilterMyEvents(e.target.checked)} 
-                  className="premium-checkbox" 
-                />
-                <span className="premium-checkbox-text">Мої</span>
-              </label>
+              {!isModerator &&
+                <label className="premium-checkbox-label">
+                  <input 
+                    type="checkbox" 
+                    checked={filterMyEvents} 
+                    onChange={e => setFilterMyEvents(e.target.checked)} 
+                    className="premium-checkbox" 
+                  />
+                  <span className="premium-checkbox-text">Мої</span>
+                </label>
+              }
               <label className="premium-checkbox-label">
                 <input 
                   type="checkbox" 

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { formatRelative, formatDistanceToNow } from 'date-fns';
 import { uk } from 'date-fns/locale';
-import { FaPaperPlane, FaTrash, FaUsers, FaBookOpen, FaPencilAlt, FaCalendarAlt } from 'react-icons/fa';
+import { FaPaperPlane, FaTrash, FaUsers, FaBookOpen, FaPencilAlt, FaCalendarAlt, FaLock } from 'react-icons/fa';
 import API from '../utils/api';
 import { eventService } from '../services/eventService';
 import { socketService } from '../services/socketService';
@@ -86,7 +86,7 @@ export default function EventFormPanel({
     setShowParticipants(false);
     setLocalParticipants(selectedEvent?.participants || []);
     setSuggestedAddress(null);
-  }, [selectedEvent?.id]);
+  }, [selectedEvent?.id, selectedEvent?.participants]);
 
     // Listen for participant changes
   useEffect(() => {
@@ -322,16 +322,14 @@ export default function EventFormPanel({
             </div>
 
             <div className="form-row organizer-privacy-row">
-              {isEditMode && (
                 <div className="form-group organizer-group">
                   <label>Організатор</label>
                   <div className="organizer-display">
-                    {selectedEvent?.creator_id === currentUser?.id 
+                    {!isEditMode || selectedEvent?.creator_id === currentUser?.id 
                       ? `Ви` 
                       : `${selectedEvent?.creator_name || 'Невідомо'} (@${selectedEvent?.creator_nickname || '?'})`}
                   </div>
                 </div>
-              )}
 
               {(!isEditMode || hasEventAccess) && (
                 <div className="form-group privacy-group">
@@ -531,7 +529,13 @@ export default function EventFormPanel({
             )}
 
             <div className="chat-messages-area">
-              {messages.length === 0 ? (
+              {!(isJoined || hasEventAccess) ? (
+                <div className="chat-empty-state">
+                  <p className="chat-empty-text chat-error-text">
+                    <FaLock className="icon-mr" /> Чат доступний лише для учасників заходу.
+                  </p>
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="chat-empty-state">
                   <p className="chat-empty-text">
                     Немає повідомлень.<br/>Будьте першим, хто напише!
